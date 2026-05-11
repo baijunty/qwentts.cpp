@@ -1,0 +1,125 @@
+ggml_cuda_init: found 1 CUDA devices (Total VRAM: 97247 MiB):
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97247 MiB
+load_backend: loaded CUDA backend from /mnt/workspace/qwentts.cpp/build/libggml-cuda.so
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = NVIDIA RTX PRO 6000 Blackwell Workstation Edition (NVIDIA) | uma: 0 | fp16: 1 | bf16: 0 | warp size: 32 | shared memory: 49152 | int dot: 1 | matrix cores: NV_coopmat2
+load_backend: loaded Vulkan backend from /mnt/workspace/qwentts.cpp/build/libggml-vulkan.so
+load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-cpu-zen4.so
+[Load] Talker backend: Vulkan0 (CPU threads: 16)
+[GGUF] ../models/qwen-talker-1.7b-base-F32.gguf: 480 tensors, data at offset 5954432
+[WeightCtx] Loaded 316 tensors, 6643.5 MB into backend
+[Talker] Loaded: 28 layers, hidden 2048, heads 16/8, head_dim 128, FFN 6144, RoPE theta 1000000, mrope sections [24,20,20] interleaved=0
+[WeightCtx] Loaded 88 tensors, 668.1 MB into backend
+[CodePredictor] Loaded: 5 layers, hidden 1024, heads 16/8, head_dim 128, FFN 3072, RoPE theta 1000000, 15 acoustic codebooks (vocab 2048 each), mtp_proj linear
+[WeightCtx] Loaded 76 tensors, 45.8 MB into backend
+[SpeakerEncoder] Loaded: enc_dim=2048 sr=24000 mel_dim=128 hidden=512 mfa=1536 asp_attn=128 se=128 scale=8
+[GGUF] ../models/qwen-tokenizer-12hz-F32.gguf: 398 tensors, data at offset 29664
+[WeightCtx] Loaded 18 tensors, 33.0 MB into backend
+[Quantizer] Loaded: 16 codebooks (1 semantic + 15 acoustic), 2048 entries x 256 dim, hidden 512
+[WeightCtx] Loaded 93 tensors, 116.1 MB into backend
+[Transformer] Loaded: 8 layers, hidden 512, heads 16/16, head_dim 64, FFN 1024, RoPE theta 10000, sliding window 72
+[WeightCtx] Loaded 22 tensors, 80.1 MB into backend
+[Upsample] Loaded: 2 blocks (2x ratio per block), channels 1024, dwconv kernel 7
+[WeightCtx] Loaded 118 tensors, 199.8 MB into backend
+[DAC] Loaded: 4 blocks (strides 8/5/4/3), 24 kHz mono out, weights 199.8 MB
+[WeightCtx] Loaded 2 tensors, 6.0 MB into backend
+[WeightCtx] Loaded 28 tensors, 48.2 MB into backend
+[SEANet] Loaded: 4 stages (ratios 4/5/6/8), 64 -> 512 channels, weights 48.2 MB
+[WeightCtx] Loaded 96 tensors, 96.1 MB into backend
+[EncTransformer] Loaded: 8 layers, hidden 512, heads 8/8, head_dim 64, FFN 2048, RoPE theta 10000
+[WeightCtx] Loaded 1 tensors, 4.0 MB into backend
+[EncDownsample] Loaded: k=4 stride=2, 512 -> 512 channels, weights 4.0 MB
+[WeightCtx] Loaded 20 tensors, 34.0 MB into backend
+[EncQuantizer] Loaded: 16 codebooks (1 semantic + 15 acoustic), 2048 entries x 256 dim, hidden 512, weights 34.0 MB
+[Pipeline] Ready: hop 1920 samples @ 24000 Hz mono, 16 codebooks @ 12.5 Hz
+[KVCache] Allocated: 28 layers, 8 KV heads, head_dim 128, max_seq_len 4096 -> 896 MB
+[KVCache] Allocated: 5 layers, 8 KV heads, head_dim 128, max_seq_len 16 -> 0 MB
+[Pipeline] Loaded: arch=1b7 variant=base tokenizer=qwen3_tts_tokenizer_12hz codebooks=16 speaker_encoder=loaded speakers=0
+[BPE] Loaded from GGUF: 151676 vocab, 151291 merges, eos_id=151643
+[BPE] Registered 5 arch special tokens (total specials=6)
+[Prompt] Built: 38 ids, N_text=30, N_instruct=0, T_ctx=40, hidden=2048, lang=english (id=2050), speaker=none (id=-1) ref_spk_emb=no icl=no
+[Debug] prompt-ids: [38] first4: 151644.000000 77091.000000 198.000000 80.000000
+[Debug] talker-input-embed: [40, 2048] first4: 0.022157 -0.009049 0.008161 -0.020214
+[Debug] trailing-text-hidden: [1, 2048] first4: -0.005331 0.008751 -0.004225 0.001141
+[Debug] tts-pad-embed: [2048] first4: -0.005331 0.008751 -0.004225 0.001141
+[Debug] talker-hidden-prefill-l0: [40, 2048] first4: -0.457824 -0.069581 0.015775 -0.038616
+[Debug] talker-hidden-prefill-l7: [40, 2048] first4: -1.527061 -0.012803 0.350664 1.772303
+[Debug] talker-hidden-prefill-l14: [40, 2048] first4: -1.298302 0.183709 0.452202 1.738756
+[Debug] talker-hidden-prefill-l21: [40, 2048] first4: -0.772566 0.165500 0.805204 1.105845
+[Debug] talker-hidden-prefill-l27: [40, 2048] first4: 7.084506 -34.605457 -7.071080 28.531052
+[Debug] talker-hidden-prefill-final: [40, 2048] first4: 0.241432 -1.231496 -0.223914 0.886260
+[Debug] talker-logits-prefill: [3072] first4: -4.187500 -6.421875 -1.005859 -3.253906
+[Sample] step=0 c0=1995 u=-1.0000000000 subseq=0
+[Sample-CP] g=0 c=1159 u=-1.0000000000 subseq=1
+[Sample-CP] g=1 c=887 u=-1.0000000000 subseq=2
+[Sample-CP] g=2 c=1853 u=-1.0000000000 subseq=3
+[Sample-CP] g=3 c=369 u=-1.0000000000 subseq=4
+[Sample-CP] g=4 c=645 u=-1.0000000000 subseq=5
+[Sample-CP] g=5 c=889 u=-1.0000000000 subseq=6
+[Sample-CP] g=6 c=1274 u=-1.0000000000 subseq=7
+[Sample-CP] g=7 c=338 u=-1.0000000000 subseq=8
+[Sample-CP] g=8 c=373 u=-1.0000000000 subseq=9
+[Sample-CP] g=9 c=359 u=-1.0000000000 subseq=10
+[Sample-CP] g=10 c=651 u=-1.0000000000 subseq=11
+[Sample-CP] g=11 c=1572 u=-1.0000000000 subseq=12
+[Sample-CP] g=12 c=1160 u=-1.0000000000 subseq=13
+[Sample-CP] g=13 c=1079 u=-1.0000000000 subseq=14
+[Sample-CP] g=14 c=780 u=-1.0000000000 subseq=15
+[Debug] codes-step0: [16] first4: 1995.000000 1159.000000 887.000000 1853.000000
+[Debug] next-emb-step0: [2048] first4: -0.019854 -0.049802 -0.034545 0.027441
+[Debug] talker-hidden-step1: [2048] first4: -1.350096 -4.437189 1.978907 -1.633949
+[Sample] step=1 c0=1028 u=-1.0000000000 subseq=16
+[Sample-CP] g=0 c=113 u=-1.0000000000 subseq=17
+[Sample-CP] g=1 c=1705 u=-1.0000000000 subseq=18
+[Sample-CP] g=2 c=1357 u=-1.0000000000 subseq=19
+[Sample-CP] g=3 c=496 u=-1.0000000000 subseq=20
+[Sample-CP] g=4 c=1461 u=-1.0000000000 subseq=21
+[Sample-CP] g=5 c=267 u=-1.0000000000 subseq=22
+[Sample-CP] g=6 c=926 u=-1.0000000000 subseq=23
+[Sample-CP] g=7 c=318 u=-1.0000000000 subseq=24
+[Sample-CP] g=8 c=1275 u=-1.0000000000 subseq=25
+[Sample-CP] g=9 c=525 u=-1.0000000000 subseq=26
+[Sample-CP] g=10 c=1842 u=-1.0000000000 subseq=27
+[Sample-CP] g=11 c=1748 u=-1.0000000000 subseq=28
+[Sample-CP] g=12 c=1918 u=-1.0000000000 subseq=29
+[Sample-CP] g=13 c=1670 u=-1.0000000000 subseq=30
+[Sample-CP] g=14 c=207 u=-1.0000000000 subseq=31
+[Pipeline] Generated 8 frames
+[Pipeline] Generated 16 frames
+[Pipeline] Generated 24 frames
+[Pipeline] Generated 32 frames
+[Pipeline] Generated 40 frames
+[Pipeline] Generated 48 frames
+[Pipeline] Generated 56 frames
+[Pipeline] Generated 64 frames
+[Pipeline] Generation done : 64 frames
+[Debug] codes-full: [64, 16] first4: 1995.000000 1159.000000 887.000000 1853.000000
+[Debug] output-audio: [122880] first4: -0.000264 -0.000364 -0.000392 -0.000405
+[WAV] Wrote cpp/base/base-cpp.wav: 122880 samples, 24000 Hz, mono S16
+[Pipeline] Wrote 122880 samples (5.12 s) -> cpp/base/base-cpp.wav
+[Input] Prompt: 100 chars: qwentts.cpp is a minimal C++17 and GGML port of Qwen3-TTS fo...
+[Input] Lang: english Seed: 42 MaxNewTokens: 64
+[Input] Mode: greedy
+[Python] Device: cuda
+[Python] InputIds shape: (1, 38)
+[Python] Codes shape: (63, 16) (T_frames, num_code_groups)
+[Python] Audio: 120960 samples 24000 Hz 5.04s -> python/base/base-python.wav
+[Quant] F32 -> ../models/qwen-talker-1.7b-base-F32.gguf + ../models/qwen-tokenizer-12hz-F32.gguf
+[GGML] Cmd: ../build/qwen-tts --model ../models/qwen-talker-1.7b-base-F32.gguf --codec ../models/qwen-tokenizer-12hz-F32.gguf --seed 42 --text qwentts.cpp is a minimal C++17 and GGML port of Qwen3-TTS for zero shot multilingual text to speech. --lang english --max-new 64 --dump cpp/base -o cpp/base/base-cpp.wav --greedy
+[GGML] Audio: 122880 samples 24000 Hz 5.12s -> cpp/base/base-cpp.wav
+[Cossim] PromptIDs exact: 100.00% (38 values)
+[Cossim] Embed cos: 1.000000 max: 2.2650e-06 mean: 1.8841e-08
+[Cossim] TrailingText cos: 1.000000 max: 1.0431e-06 mean: 9.3616e-09
+[Cossim] TTSPadEmbed cos: 1.000000 max: 1.0431e-06 mean: 9.3616e-09
+[Cossim] L0 cos: 0.999998 max: 7.0589e-02 mean: 2.3487e-04
+[Cossim] L7 cos: 0.999997 max: 2.0187e+01 mean: 2.8197e-03
+[Cossim] L14 cos: 0.999997 max: 2.0179e+01 mean: 4.5399e-03
+[Cossim] L21 cos: 0.999997 max: 2.0261e+01 mean: 1.2459e-02
+[Cossim] L27 cos: 0.999991 max: 3.5026e+01 mean: 8.5269e-02
+[Cossim] Final cos: 0.999982 max: 4.8414e-01 mean: 4.7583e-03
+[Cossim] Logits cos: 0.999993 max: 7.4465e-02 mean: 1.1664e-02
+[Cossim] NextEmbStep0 cos: 0.431734 max: 5.4164e-01 mean: 5.7355e-02
+[Cossim] TalkerHiddenStep1 cos: 0.282685 max: 2.3768e+01 mean: 2.1941e+00
+[Cossim] CodesFull exact: 0.30% (1008 values)
+[Cossim] Audio cos: 0.039381
+[Cossim] WAV stft_cos: 0.057063 samples: 120960
