@@ -20,15 +20,15 @@ load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-c
 [Transformer] Loaded: 8 layers, hidden 512, heads 16/16, head_dim 64, FFN 1024, RoPE theta 10000, sliding window 72
 [WeightCtx] Loaded 22 tensors, 80.1 MB into backend
 [Upsample] Loaded: 2 blocks (2x ratio per block), channels 1024, dwconv kernel 7
-[WeightCtx] Loaded 118 tensors, 199.8 MB into backend
-[DAC] Loaded: 4 blocks (strides 8/5/4/3), 24 kHz mono out, weights 199.8 MB
-[WeightCtx] Loaded 2 tensors, 6.0 MB into backend
-[WeightCtx] Loaded 28 tensors, 48.2 MB into backend
-[SEANet] Loaded: 4 stages (ratios 4/5/6/8), 64 -> 512 channels, weights 48.2 MB
+[WeightCtx] Loaded 118 tensors, 142.9 MB into backend
+[DAC] Loaded: 4 blocks (strides 8/5/4/3), 24 kHz mono out, weights 142.9 MB
+[WeightCtx] Loaded 2 tensors, 3.0 MB into backend
+[WeightCtx] Loaded 28 tensors, 24.1 MB into backend
+[SEANet] Loaded: 4 stages (ratios 4/5/6/8), 64 -> 512 channels, weights 24.1 MB
 [WeightCtx] Loaded 96 tensors, 96.1 MB into backend
 [EncTransformer] Loaded: 8 layers, hidden 512, heads 8/8, head_dim 64, FFN 2048, RoPE theta 10000
-[WeightCtx] Loaded 1 tensors, 4.0 MB into backend
-[EncDownsample] Loaded: k=4 stride=2, 512 -> 512 channels, weights 4.0 MB
+[WeightCtx] Loaded 1 tensors, 2.0 MB into backend
+[EncDownsample] Loaded: k=4 stride=2, 512 -> 512 channels, weights 2.0 MB
 [WeightCtx] Loaded 20 tensors, 34.0 MB into backend
 [EncQuantizer] Loaded: 16 codebooks (1 semantic + 15 acoustic), 2048 entries x 256 dim, hidden 512, weights 34.0 MB
 [Pipeline] Ready: hop 1920 samples @ 24000 Hz mono, 16 codebooks @ 12.5 Hz
@@ -121,7 +121,7 @@ load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-c
 [Pipeline] Generated 64 frames
 [Pipeline] Generation done : 64 frames
 [Debug] codes-full: [64, 16] first4: 27.000000 1408.000000 1824.000000 400.000000
-[Debug] output-audio: [122880] first4: -0.001264 -0.002193 -0.002047 -0.000957
+[Debug] output-audio: [122880] first4: -0.001265 -0.002192 -0.002047 -0.000956
 [WAV] Wrote cpp/clone/clone-cpp.wav: 122880 samples, 24000 Hz, mono S16
 [Pipeline] Wrote 122880 samples (5.12 s) -> cpp/clone/clone-cpp.wav
 [Input] Prompt: 100 chars: qwentts.cpp is a minimal C++17 and GGML port of Qwen3-TTS fo...
@@ -172,5 +172,5 @@ load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-c
 [Cossim] SpkASP cos: 1.000000 max: 7.9870e-06 mean: 2.2269e-07
 [Cossim] SpeakerEmb cos: 1.000000 max: 1.4305e-05 mean: 2.5463e-07
 [Cossim] CodesFull exact: 3.27% (1008 values)
-[Cossim] Audio cos: 0.053928
-[Cossim] WAV stft_cos: 0.375522 samples: 120960
+[Cossim] Audio cos: 0.053931
+[Cossim] WAV stft_cos: 0.375521 samples: 120960
