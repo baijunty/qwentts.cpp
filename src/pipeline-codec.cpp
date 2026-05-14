@@ -28,28 +28,28 @@ bool pipeline_codec_load(PipelineCodec * pc, const char * gguf_path, BackendPair
         return false;
     }
 
-    if (!qwen_quantizer_decoder_load(&pc->qdec, pc->gguf, pc->backend)) {
+    if (!quant_decoder_load(&pc->qdec, pc->gguf, pc->backend)) {
         gf_close(&pc->gguf);
         return false;
     }
 
-    if (!qwen_tokenizer_transformer_load(&pc->transformer, pc->gguf, pc->backend)) {
-        qwen_quantizer_decoder_free(&pc->qdec);
+    if (!tok_trans_load(&pc->transformer, pc->gguf, pc->backend)) {
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
 
-    if (!qwen_upsample_stage_load(&pc->upsample, pc->gguf, pc->backend)) {
-        qwen_tokenizer_transformer_free(&pc->transformer);
-        qwen_quantizer_decoder_free(&pc->qdec);
+    if (!upsample_stage_load(&pc->upsample, pc->gguf, pc->backend)) {
+        tok_trans_free(&pc->transformer);
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
 
-    if (!qwen_dac_decoder_load(&pc->dac, pc->gguf, pc->backend)) {
-        qwen_upsample_stage_free(&pc->upsample);
-        qwen_tokenizer_transformer_free(&pc->transformer);
-        qwen_quantizer_decoder_free(&pc->qdec);
+    if (!dac_decoder_load(&pc->dac, pc->gguf, pc->backend)) {
+        upsample_stage_free(&pc->upsample);
+        tok_trans_free(&pc->transformer);
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
@@ -62,10 +62,10 @@ bool pipeline_codec_load(PipelineCodec * pc, const char * gguf_path, BackendPair
         pc->pre_conv_b = gf_load_tensor(&wctx, pc->gguf, "tok_dec.pre_conv.bias");
         if (!wctx_alloc(&wctx, pc->backend)) {
             qt_log(QT_LOG_ERROR, "[Pipeline] pre_conv backend allocation failed");
-            qwen_dac_decoder_free(&pc->dac);
-            qwen_upsample_stage_free(&pc->upsample);
-            qwen_tokenizer_transformer_free(&pc->transformer);
-            qwen_quantizer_decoder_free(&pc->qdec);
+            dac_decoder_free(&pc->dac);
+            upsample_stage_free(&pc->upsample);
+            tok_trans_free(&pc->transformer);
+            quant_decoder_free(&pc->qdec);
             gf_close(&pc->gguf);
             return false;
         }
@@ -73,66 +73,66 @@ bool pipeline_codec_load(PipelineCodec * pc, const char * gguf_path, BackendPair
         pc->pre_conv_buf = wctx.buffer;
     }
 
-    if (!qwen_seanet_encoder_load(&pc->seanet, pc->gguf, pc->backend)) {
+    if (!seanet_encoder_load(&pc->seanet, pc->gguf, pc->backend)) {
         ggml_backend_buffer_free(pc->pre_conv_buf);
         ggml_free(pc->pre_conv_ctx);
-        qwen_dac_decoder_free(&pc->dac);
-        qwen_upsample_stage_free(&pc->upsample);
-        qwen_tokenizer_transformer_free(&pc->transformer);
-        qwen_quantizer_decoder_free(&pc->qdec);
+        dac_decoder_free(&pc->dac);
+        upsample_stage_free(&pc->upsample);
+        tok_trans_free(&pc->transformer);
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
 
-    if (!qwen_encoder_transformer_load(&pc->enc_transformer, pc->gguf, pc->backend)) {
-        qwen_seanet_encoder_free(&pc->seanet);
+    if (!enc_trans_load(&pc->enc_transformer, pc->gguf, pc->backend)) {
+        seanet_encoder_free(&pc->seanet);
         ggml_backend_buffer_free(pc->pre_conv_buf);
         ggml_free(pc->pre_conv_ctx);
-        qwen_dac_decoder_free(&pc->dac);
-        qwen_upsample_stage_free(&pc->upsample);
-        qwen_tokenizer_transformer_free(&pc->transformer);
-        qwen_quantizer_decoder_free(&pc->qdec);
+        dac_decoder_free(&pc->dac);
+        upsample_stage_free(&pc->upsample);
+        tok_trans_free(&pc->transformer);
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
 
-    if (!qwen_encoder_downsample_load(&pc->enc_downsample, pc->gguf, pc->backend)) {
-        qwen_encoder_transformer_free(&pc->enc_transformer);
-        qwen_seanet_encoder_free(&pc->seanet);
+    if (!enc_down_load(&pc->enc_downsample, pc->gguf, pc->backend)) {
+        enc_trans_free(&pc->enc_transformer);
+        seanet_encoder_free(&pc->seanet);
         ggml_backend_buffer_free(pc->pre_conv_buf);
         ggml_free(pc->pre_conv_ctx);
-        qwen_dac_decoder_free(&pc->dac);
-        qwen_upsample_stage_free(&pc->upsample);
-        qwen_tokenizer_transformer_free(&pc->transformer);
-        qwen_quantizer_decoder_free(&pc->qdec);
+        dac_decoder_free(&pc->dac);
+        upsample_stage_free(&pc->upsample);
+        tok_trans_free(&pc->transformer);
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
 
-    if (!qwen_quantizer_encode_load(&pc->qenc, pc->gguf, pc->backend)) {
-        qwen_encoder_downsample_free(&pc->enc_downsample);
-        qwen_encoder_transformer_free(&pc->enc_transformer);
-        qwen_seanet_encoder_free(&pc->seanet);
+    if (!quant_encode_load(&pc->qenc, pc->gguf, pc->backend)) {
+        enc_down_free(&pc->enc_downsample);
+        enc_trans_free(&pc->enc_transformer);
+        seanet_encoder_free(&pc->seanet);
         ggml_backend_buffer_free(pc->pre_conv_buf);
         ggml_free(pc->pre_conv_ctx);
-        qwen_dac_decoder_free(&pc->dac);
-        qwen_upsample_stage_free(&pc->upsample);
-        qwen_tokenizer_transformer_free(&pc->transformer);
-        qwen_quantizer_decoder_free(&pc->qdec);
+        dac_decoder_free(&pc->dac);
+        upsample_stage_free(&pc->upsample);
+        tok_trans_free(&pc->transformer);
+        quant_decoder_free(&pc->qdec);
         gf_close(&pc->gguf);
         return false;
     }
 
     pc->sched = backend_sched_new(bp, 4096);
 
-    qt_log(QT_LOG_INFO, "[Pipeline] Ready: hop %d samples @ %d Hz mono, %d codebooks @ 12.5 Hz",
-           QWEN_TOKENIZER_HOP_LENGTH, QWEN_TOKENIZER_SAMPLE_RATE, QWEN_TOKENIZER_NUM_CODEBOOKS);
+    qt_log(QT_LOG_INFO, "[Pipeline] Ready: hop %d samples @ %d Hz mono, %d codebooks @ 12.5 Hz", TOKENIZER_HOP_LENGTH,
+           TOKENIZER_SAMPLE_RATE, TOKENIZER_NUM_CODEBOOKS);
     return true;
 }
 
 std::vector<float> pipeline_codec_decode(PipelineCodec * pc, const int32_t * codes, int K, int T) {
-    if (K != QWEN_TOKENIZER_NUM_CODEBOOKS) {
-        qt_log(QT_LOG_ERROR, "[Pipeline] codes have %d codebooks, expected %d", K, QWEN_TOKENIZER_NUM_CODEBOOKS);
+    if (K != TOKENIZER_NUM_CODEBOOKS) {
+        qt_log(QT_LOG_ERROR, "[Pipeline] codes have %d codebooks, expected %d", K, TOKENIZER_NUM_CODEBOOKS);
         return {};
     }
     if (T <= 0) {
@@ -168,15 +168,15 @@ std::vector<float> pipeline_codec_decode(PipelineCodec * pc, const int32_t * cod
 
     // Build forward graph. Layout transitions are explicit ggml_cont(ggml_transpose(...))
     // calls: 3 transposes total at the natural module boundaries.
-    struct ggml_tensor * h = qwen_quantizer_decode(gctx, &pc->qdec, codes_in);                   // [512, T] C-first
+    struct ggml_tensor * h = quant_decode(gctx, &pc->qdec, codes_in);                            // [512, T] C-first
     h                      = ggml_cont(gctx, ggml_transpose(gctx, h));                           // [T, 512] T-first
     h                      = qwen_causal_conv1d(gctx, pc->pre_conv_w, pc->pre_conv_b, h, 3, 1);  // [T, 1024] T-first
     h                      = ggml_cont(gctx, ggml_transpose(gctx, h));                           // [1024, T] C-first
-    h = qwen_tokenizer_transformer_forward(gctx, &pc->transformer, h, positions, mask);          // [1024, T]
-    h = ggml_cont(gctx, ggml_transpose(gctx, h));                                                // [T, 1024] T-first
-    h = qwen_upsample_stage_forward(gctx, &pc->upsample, h);                                     // [T*4, 1024]
-    h = qwen_dac_decoder_forward(gctx, &pc->dac, h);                                             // [T*1920, 1]
-    h = ggml_clamp(gctx, h, -1.0f, 1.0f);
+    h                      = tok_trans_forward(gctx, &pc->transformer, h, positions, mask);      // [1024, T]
+    h                      = ggml_cont(gctx, ggml_transpose(gctx, h));                           // [T, 1024] T-first
+    h                      = upsample_stage_forward(gctx, &pc->upsample, h);                     // [T*4, 1024]
+    h                      = dac_decoder_forward(gctx, &pc->dac, h);                             // [T*1920, 1]
+    h                      = ggml_clamp(gctx, h, -1.0f, 1.0f);
 
     ggml_set_name(h, "audio_out");
     ggml_set_output(h);
@@ -195,11 +195,11 @@ std::vector<float> pipeline_codec_decode(PipelineCodec * pc, const int32_t * cod
     ggml_backend_tensor_set(codes_in, codes, 0, (size_t) T * (size_t) K * sizeof(int32_t));
 
     std::vector<int32_t> pos_buf;
-    qwen_build_positions(T, pos_buf);
+    tok_trans_build_positions(T, pos_buf);
     ggml_backend_tensor_set(positions, pos_buf.data(), 0, pos_buf.size() * sizeof(int32_t));
 
     std::vector<float> mask_buf;
-    qwen_build_causal_sliding_mask(T, pc->transformer.sliding_window, mask_buf);
+    tok_trans_build_causal_sliding_mask(T, pc->transformer.sliding_window, mask_buf);
     ggml_backend_tensor_set(mask, mask_buf.data(), 0, mask_buf.size() * sizeof(float));
 
     // Compute
@@ -212,7 +212,7 @@ std::vector<float> pipeline_codec_decode(PipelineCodec * pc, const int32_t * cod
     }
 
     // Fetch audio output
-    const int          n_samples = T * QWEN_TOKENIZER_HOP_LENGTH;
+    const int          n_samples = T * TOKENIZER_HOP_LENGTH;
     std::vector<float> audio((size_t) n_samples);
     ggml_backend_tensor_get(h, audio.data(), 0, (size_t) n_samples * sizeof(float));
 
@@ -225,19 +225,19 @@ std::vector<int32_t> pipeline_codec_encode(PipelineCodec * pc,
                                            const float *   audio,
                                            int             n_samples,
                                            const char *    dump_dir) {
-    if (n_samples <= 0 || (n_samples % QWEN_TOKENIZER_HOP_LENGTH) != 0) {
-        qt_log(QT_LOG_ERROR, "[Pipeline] n_samples must be a positive multiple of %d (got %d)",
-               QWEN_TOKENIZER_HOP_LENGTH, n_samples);
+    if (n_samples <= 0 || (n_samples % TOKENIZER_HOP_LENGTH) != 0) {
+        qt_log(QT_LOG_ERROR, "[Pipeline] n_samples must be a positive multiple of %d (got %d)", TOKENIZER_HOP_LENGTH,
+               n_samples);
         return {};
     }
-    int T = n_samples / QWEN_TOKENIZER_HOP_LENGTH;
+    int T = n_samples / TOKENIZER_HOP_LENGTH;
 
     // Lazy-load CPU mirror of the RVQ encode codebooks on first call.
     if (!pc->qenc_host_ready) {
-        qwen_quantizer_encode_host_load(&pc->qenc_sem_host, pc->qenc.semantic, pc->qenc.codebook_size,
-                                        pc->qenc.codebook_dim, pc->qenc.hidden_size);
-        qwen_quantizer_encode_host_load(&pc->qenc_aco_host, pc->qenc.acoustic, pc->qenc.codebook_size,
-                                        pc->qenc.codebook_dim, pc->qenc.hidden_size);
+        quant_encode_host_load(&pc->qenc_sem_host, pc->qenc.semantic, pc->qenc.codebook_size, pc->qenc.codebook_dim,
+                               pc->qenc.hidden_size);
+        quant_encode_host_load(&pc->qenc_aco_host, pc->qenc.acoustic, pc->qenc.codebook_size, pc->qenc.codebook_dim,
+                               pc->qenc.hidden_size);
         pc->qenc_host_ready = true;
     }
 
@@ -274,13 +274,12 @@ std::vector<int32_t> pipeline_codec_encode(PipelineCodec * pc,
     struct ggml_tensor * sn_stage1_t  = NULL;
     struct ggml_tensor * sn_stage3_t  = NULL;
     struct ggml_tensor * h_seanet =
-        qwen_seanet_encoder_forward(gctx, &pc->seanet, audio_in, &sn_init_t, &sn_resnet0_t, &sn_stage0_t, &sn_stage1_t,
-                                    &sn_stage3_t);                                         // [T_emb, 512]
-    struct ggml_tensor * h = ggml_cont(gctx, ggml_transpose(gctx, h_seanet));              // [512, T_emb]
-    struct ggml_tensor * h_et =
-        qwen_encoder_transformer_forward(gctx, &pc->enc_transformer, h, positions, mask);  // [512, T_emb]
-    h = ggml_cont(gctx, ggml_transpose(gctx, h_et));                                       // [T_emb, 512]
-    h = qwen_encoder_downsample_forward(gctx, &pc->enc_downsample, h);                     // [T, 512]
+        seanet_encoder_forward(gctx, &pc->seanet, audio_in, &sn_init_t, &sn_resnet0_t, &sn_stage0_t, &sn_stage1_t,
+                               &sn_stage3_t);                                                       // [T_emb, 512]
+    struct ggml_tensor * h    = ggml_cont(gctx, ggml_transpose(gctx, h_seanet));                    // [512, T_emb]
+    struct ggml_tensor * h_et = enc_trans_forward(gctx, &pc->enc_transformer, h, positions, mask);  // [512, T_emb]
+    h                         = ggml_cont(gctx, ggml_transpose(gctx, h_et));                        // [T_emb, 512]
+    h                         = enc_down_forward(gctx, &pc->enc_downsample, h);                     // [T, 512]
 
     // The CPU RVQ encode loop expects the hidden buffer as [T, hidden]
     // row-major (hidden fast in memory). The downsample output ne=(T, 512)
@@ -369,11 +368,11 @@ std::vector<int32_t> pipeline_codec_encode(PipelineCodec * pc,
     ggml_backend_tensor_set(audio_in, audio, 0, (size_t) n_samples * sizeof(float));
 
     std::vector<int32_t> pos_buf;
-    qwen_encoder_build_positions(T_emb, pos_buf);
+    enc_trans_build_positions(T_emb, pos_buf);
     ggml_backend_tensor_set(positions, pos_buf.data(), 0, pos_buf.size() * sizeof(int32_t));
 
     std::vector<float> mask_buf;
-    qwen_encoder_build_causal_mask(T_emb, mask_buf);
+    enc_trans_build_causal_mask(T_emb, mask_buf);
     ggml_backend_tensor_set(mask, mask_buf.data(), 0, mask_buf.size() * sizeof(float));
 
     enum ggml_status st = ggml_backend_sched_graph_compute(pc->sched, graph);
@@ -424,14 +423,14 @@ std::vector<int32_t> pipeline_codec_encode(PipelineCodec * pc,
     // Read back the post-downsample hidden buffer for CPU-side RVQ encode.
     // Layout in ggml is [T, hidden] with T on ne[0]. The contiguous memory
     // walks T fast, hidden slow, which matches the `[T, hidden] row-major
-    // index = t*hidden + c` convention expected by qwen_quantizer_encode_cpu.
+    // index = t*hidden + c` convention expected by quant_encode_cpu.
     std::vector<float> hidden_host((size_t) T * (size_t) pc->qenc.hidden_size);
     ggml_backend_tensor_get(h, hidden_host.data(), 0, hidden_host.size() * sizeof(float));
 
     ggml_backend_sched_reset(pc->sched);
     ggml_free(gctx);
 
-    return qwen_quantizer_encode_cpu(&pc->qenc_sem_host, &pc->qenc_aco_host, hidden_host.data(), T);
+    return quant_encode_cpu(&pc->qenc_sem_host, &pc->qenc_aco_host, hidden_host.data(), T);
 }
 
 void pipeline_codec_free(PipelineCodec * pc) {
@@ -439,10 +438,10 @@ void pipeline_codec_free(PipelineCodec * pc) {
         ggml_backend_sched_free(pc->sched);
         pc->sched = NULL;
     }
-    qwen_quantizer_encode_free(&pc->qenc);
-    qwen_encoder_downsample_free(&pc->enc_downsample);
-    qwen_encoder_transformer_free(&pc->enc_transformer);
-    qwen_seanet_encoder_free(&pc->seanet);
+    quant_encode_free(&pc->qenc);
+    enc_down_free(&pc->enc_downsample);
+    enc_trans_free(&pc->enc_transformer);
+    seanet_encoder_free(&pc->seanet);
     if (pc->pre_conv_buf) {
         ggml_backend_buffer_free(pc->pre_conv_buf);
         pc->pre_conv_buf = NULL;
@@ -451,10 +450,10 @@ void pipeline_codec_free(PipelineCodec * pc) {
         ggml_free(pc->pre_conv_ctx);
         pc->pre_conv_ctx = NULL;
     }
-    qwen_dac_decoder_free(&pc->dac);
-    qwen_upsample_stage_free(&pc->upsample);
-    qwen_tokenizer_transformer_free(&pc->transformer);
-    qwen_quantizer_decoder_free(&pc->qdec);
+    dac_decoder_free(&pc->dac);
+    upsample_stage_free(&pc->upsample);
+    tok_trans_free(&pc->transformer);
+    quant_decoder_free(&pc->qdec);
     if (pc->gguf.gguf) {
         gf_close(&pc->gguf);
     }

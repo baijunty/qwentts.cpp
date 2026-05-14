@@ -33,15 +33,15 @@
 #include <cstdlib>
 #include <string>
 
-#define QWEN_ENC_QUANT_NUM_SEMANTIC 1
-#define QWEN_ENC_QUANT_NUM_ACOUSTIC 15
-#define QWEN_ENC_QUANT_TOTAL        (QWEN_ENC_QUANT_NUM_SEMANTIC + QWEN_ENC_QUANT_NUM_ACOUSTIC)
+#define QUANT_ENC_NUM_SEMANTIC 1
+#define QUANT_ENC_NUM_ACOUSTIC 15
+#define QUANT_ENC_TOTAL        (QUANT_ENC_NUM_SEMANTIC + QUANT_ENC_NUM_ACOUSTIC)
 
 struct QwenQuantizerEncodeSide {
-    struct ggml_tensor * input_proj_w;                            // [1, 512, 256] f32, k=1 conv
-    struct ggml_tensor * output_proj_w;                           // [1, 256, 512] f32, k=1 conv
+    struct ggml_tensor * input_proj_w;                       // [1, 512, 256] f32, k=1 conv
+    struct ggml_tensor * output_proj_w;                      // [1, 256, 512] f32, k=1 conv
     int                  num_layers;
-    struct ggml_tensor * codebooks[QWEN_ENC_QUANT_NUM_ACOUSTIC];  // [256, 2048] each
+    struct ggml_tensor * codebooks[QUANT_ENC_NUM_ACOUSTIC];  // [256, 2048] each
 };
 
 struct QwenQuantizerEncode {
@@ -56,28 +56,28 @@ struct QwenQuantizerEncode {
     ggml_backend_buffer_t weight_buf;
 };
 
-static bool qwen_quantizer_encode_load(QwenQuantizerEncode * q, const GGUFModel & gf, ggml_backend_t backend) {
+static bool quant_encode_load(QwenQuantizerEncode * q, const GGUFModel & gf, ggml_backend_t backend) {
     q->codebook_size = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.codebook_size");
     q->codebook_dim  = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.vector_quantization_hidden_dim");
     q->hidden_size   = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.hidden_size");
 
-    int       n_tensors = 4 + QWEN_ENC_QUANT_TOTAL + 4;  // 4 proj + 16 codebooks + headroom
+    int       n_tensors = 4 + QUANT_ENC_TOTAL + 4;  // 4 proj + 16 codebooks + headroom
     WeightCtx wctx;
     wctx_init(&wctx, n_tensors);
 
-    q->semantic.num_layers    = QWEN_ENC_QUANT_NUM_SEMANTIC;
+    q->semantic.num_layers    = QUANT_ENC_NUM_SEMANTIC;
     q->semantic.input_proj_w  = gf_load_tensor(&wctx, gf, "tok_enc.vq_semantic.input_proj.weight");
     q->semantic.output_proj_w = gf_load_tensor(&wctx, gf, "tok_enc.vq_semantic.output_proj.weight");
-    for (int i = 0; i < QWEN_ENC_QUANT_NUM_SEMANTIC; i++) {
+    for (int i = 0; i < QUANT_ENC_NUM_SEMANTIC; i++) {
         char name[96];
         snprintf(name, sizeof(name), "tok_enc.vq_semantic.%d.codebook", i);
         q->semantic.codebooks[i] = gf_load_tensor(&wctx, gf, name);
     }
 
-    q->acoustic.num_layers    = QWEN_ENC_QUANT_NUM_ACOUSTIC;
+    q->acoustic.num_layers    = QUANT_ENC_NUM_ACOUSTIC;
     q->acoustic.input_proj_w  = gf_load_tensor(&wctx, gf, "tok_enc.vq_acoustic.input_proj.weight");
     q->acoustic.output_proj_w = gf_load_tensor(&wctx, gf, "tok_enc.vq_acoustic.output_proj.weight");
-    for (int i = 0; i < QWEN_ENC_QUANT_NUM_ACOUSTIC; i++) {
+    for (int i = 0; i < QUANT_ENC_NUM_ACOUSTIC; i++) {
         char name[96];
         snprintf(name, sizeof(name), "tok_enc.vq_acoustic.%d.codebook", i);
         q->acoustic.codebooks[i] = gf_load_tensor(&wctx, gf, name);
@@ -93,12 +93,12 @@ static bool qwen_quantizer_encode_load(QwenQuantizerEncode * q, const GGUFModel 
     fprintf(stderr,
             "[EncQuantizer] Loaded: %d codebooks (%d semantic + %d acoustic), %d entries x %d dim, "
             "hidden %d, weights %.1f MB\n",
-            QWEN_ENC_QUANT_TOTAL, QWEN_ENC_QUANT_NUM_SEMANTIC, QWEN_ENC_QUANT_NUM_ACOUSTIC, q->codebook_size,
-            q->codebook_dim, q->hidden_size, (float) ggml_backend_buffer_get_size(q->weight_buf) / (1024.0f * 1024.0f));
+            QUANT_ENC_TOTAL, QUANT_ENC_NUM_SEMANTIC, QUANT_ENC_NUM_ACOUSTIC, q->codebook_size, q->codebook_dim,
+            q->hidden_size, (float) ggml_backend_buffer_get_size(q->weight_buf) / (1024.0f * 1024.0f));
     return true;
 }
 
-static void qwen_quantizer_encode_free(QwenQuantizerEncode * q) {
+static void quant_encode_free(QwenQuantizerEncode * q) {
     if (q->weight_buf) {
         ggml_backend_buffer_free(q->weight_buf);
         q->weight_buf = NULL;
@@ -128,11 +128,11 @@ struct QwenQuantizerEncodeHost {
     std::vector<float>              output_proj;
 };
 
-static void qwen_quantizer_encode_host_load(QwenQuantizerEncodeHost *       h,
-                                            const QwenQuantizerEncodeSide & side,
-                                            int                             codebook_size,
-                                            int                             codebook_dim,
-                                            int                             hidden_size) {
+static void quant_encode_host_load(QwenQuantizerEncodeHost *       h,
+                                   const QwenQuantizerEncodeSide & side,
+                                   int                             codebook_size,
+                                   int                             codebook_dim,
+                                   int                             hidden_size) {
     h->num_layers    = side.num_layers;
     h->codebook_size = codebook_size;
     h->codebook_dim  = codebook_dim;
@@ -169,7 +169,7 @@ static void qwen_quantizer_encode_host_load(QwenQuantizerEncodeHost *       h,
 // The contiguous memory of the ggml weight walks `in` fast and `out` slow,
 // matching the numpy view as [out, in] row-major. So `w[o*in + i]` selects
 // row o, column i of the underlying [out, in] matrix.
-static void qwen_quantizer_encode_linear(const float * w, int in_dim, int out_dim, const float * x, int N, float * y) {
+static void quant_encode_linear(const float * w, int in_dim, int out_dim, const float * x, int N, float * y) {
     for (int n = 0; n < N; n++) {
         const float * xn = x + (size_t) n * (size_t) in_dim;
         float *       yn = y + (size_t) n * (size_t) out_dim;
@@ -187,10 +187,10 @@ static void qwen_quantizer_encode_linear(const float * w, int in_dim, int out_di
 // One RVQ side encode loop. Mutates `res` in-place as the residual stream.
 // Appends T frames of codebook indices for each of side.num_layers, in
 // the order: layer_0[0..T], layer_1[0..T], ..., layer_{L-1}[0..T].
-static void qwen_quantizer_encode_side_loop(const QwenQuantizerEncodeHost * h,
-                                            std::vector<float> &            res,
-                                            int                             T,
-                                            std::vector<int32_t> &          codes_out) {
+static void quant_encode_side_loop(const QwenQuantizerEncodeHost * h,
+                                   std::vector<float> &            res,
+                                   int                             T,
+                                   std::vector<int32_t> &          codes_out) {
     int D = h->codebook_dim;
     int E = h->codebook_size;
 
@@ -229,30 +229,30 @@ static void qwen_quantizer_encode_side_loop(const QwenQuantizerEncodeHost * h,
 
 // Full RVQ encode. Takes the post-downsample hidden [T, hidden_size] f32
 // row-major buffer and returns flat codes [K, T] row-major, where K is
-// QWEN_ENC_QUANT_TOTAL = 16.
+// QUANT_ENC_TOTAL = 16.
 //   hidden: [T, hidden_size] f32 row-major (T fast in pseudo, but here
 //            row-major means index = t*hidden + c, t slow, c fast)
 //
 // Returns codes flat as [16, T] row-major: codes[k*T + t].
-static std::vector<int32_t> qwen_quantizer_encode_cpu(const QwenQuantizerEncodeHost * sem,
-                                                      const QwenQuantizerEncodeHost * aco,
-                                                      const float *                   hidden,
-                                                      int                             T) {
+static std::vector<int32_t> quant_encode_cpu(const QwenQuantizerEncodeHost * sem,
+                                             const QwenQuantizerEncodeHost * aco,
+                                             const float *                   hidden,
+                                             int                             T) {
     std::vector<int32_t> codes;
-    codes.reserve((size_t) QWEN_ENC_QUANT_TOTAL * (size_t) T);
+    codes.reserve((size_t) QUANT_ENC_TOTAL * (size_t) T);
 
     // Project hidden to codebook_dim for each side independently.
     int D = sem->codebook_dim;
 
     // Semantic side
     std::vector<float> proj_sem((size_t) T * (size_t) D);
-    qwen_quantizer_encode_linear(sem->input_proj.data(), sem->hidden_size, D, hidden, T, proj_sem.data());
-    qwen_quantizer_encode_side_loop(sem, proj_sem, T, codes);
+    quant_encode_linear(sem->input_proj.data(), sem->hidden_size, D, hidden, T, proj_sem.data());
+    quant_encode_side_loop(sem, proj_sem, T, codes);
 
     // Acoustic side
     std::vector<float> proj_aco((size_t) T * (size_t) D);
-    qwen_quantizer_encode_linear(aco->input_proj.data(), aco->hidden_size, D, hidden, T, proj_aco.data());
-    qwen_quantizer_encode_side_loop(aco, proj_aco, T, codes);
+    quant_encode_linear(aco->input_proj.data(), aco->hidden_size, D, hidden, T, proj_aco.data());
+    quant_encode_side_loop(aco, proj_aco, T, codes);
 
     return codes;
 }

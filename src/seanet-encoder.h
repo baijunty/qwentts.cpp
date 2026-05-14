@@ -30,7 +30,7 @@
 #include <cstdlib>
 #include <string>
 
-#define QWEN_SEANET_NUM_STAGES 4
+#define SEANET_NUM_STAGES 4
 
 struct QwenSEANetResNet {
     // First conv inside the residual: depthwise reduction by config.compress
@@ -58,7 +58,7 @@ struct QwenSEANetEncoder {
     struct ggml_tensor * init_w;
     struct ggml_tensor * init_b;
 
-    QwenSEANetStage stages[QWEN_SEANET_NUM_STAGES];
+    QwenSEANetStage stages[SEANET_NUM_STAGES];
 
     // Last conv: k=last_kernel_size (3), final_dim -> hidden_size (512)
     struct ggml_tensor * last_w;
@@ -76,7 +76,7 @@ struct QwenSEANetEncoder {
 };
 
 // Read encoder hyperparameters and bind every SEANet tensor on the backend.
-static bool qwen_seanet_encoder_load(QwenSEANetEncoder * s, const GGUFModel & gf, ggml_backend_t backend) {
+static bool seanet_encoder_load(QwenSEANetEncoder * s, const GGUFModel & gf, ggml_backend_t backend) {
     s->kernel_size          = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.kernel_size");
     s->residual_kernel_size = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.residual_kernel_size");
     s->last_kernel_size     = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.last_kernel_size");
@@ -88,22 +88,22 @@ static bool qwen_seanet_encoder_load(QwenSEANetEncoder * s, const GGUFModel & gf
     // Python downsampling iterates `reversed(upsampling_ratios)` = [4, 5, 6, 8],
     // so stage 0 applies ratio 4, stage 1 ratio 5, stage 2 ratio 6, stage 3
     // ratio 8. Cumulative downsample is 4*5*6*8 = 960.
-    int ratios[QWEN_SEANET_NUM_STAGES];
+    int ratios[SEANET_NUM_STAGES];
     {
         const auto & arr = gf_get_array_u32(gf, "qwen3-tts-tokenizer.encoder.upsampling_ratios");
-        if ((int) arr.size() != QWEN_SEANET_NUM_STAGES) {
+        if ((int) arr.size() != SEANET_NUM_STAGES) {
             fprintf(stderr, "[SEANet] FATAL: upsampling_ratios has %d entries, expected %d\n", (int) arr.size(),
-                    QWEN_SEANET_NUM_STAGES);
+                    SEANET_NUM_STAGES);
             return false;
         }
-        for (int i = 0; i < QWEN_SEANET_NUM_STAGES; i++) {
-            ratios[i] = (int) arr[QWEN_SEANET_NUM_STAGES - 1 - i];
+        for (int i = 0; i < SEANET_NUM_STAGES; i++) {
+            ratios[i] = (int) arr[SEANET_NUM_STAGES - 1 - i];
         }
     }
 
-    int n_tensors = 4                             // init wb + last wb
-                    + QWEN_SEANET_NUM_STAGES * 6  // 4 resnet wb + 2 down wb per stage
-                    + 4;                          // headroom
+    int n_tensors = 4                        // init wb + last wb
+                    + SEANET_NUM_STAGES * 6  // 4 resnet wb + 2 down wb per stage
+                    + 4;                     // headroom
     WeightCtx wctx;
     wctx_init(&wctx, n_tensors);
 
@@ -117,7 +117,7 @@ static bool qwen_seanet_encoder_load(QwenSEANetEncoder * s, const GGUFModel & gf
     static const int DOWN_PY_IDX[] = { 3, 6, 9, 12 };
 
     int dim = s->num_filters;
-    for (int i = 0; i < QWEN_SEANET_NUM_STAGES; i++) {
+    for (int i = 0; i < SEANET_NUM_STAGES; i++) {
         QwenSEANetStage & stg = s->stages[i];
         stg.ratio             = ratios[i];
         stg.in_ch             = dim;
@@ -159,7 +159,7 @@ static bool qwen_seanet_encoder_load(QwenSEANetEncoder * s, const GGUFModel & gf
     return true;
 }
 
-static void qwen_seanet_encoder_free(QwenSEANetEncoder * s) {
+static void seanet_encoder_free(QwenSEANetEncoder * s) {
     if (s->weight_buf) {
         ggml_backend_buffer_free(s->weight_buf);
         s->weight_buf = NULL;
@@ -172,10 +172,10 @@ static void qwen_seanet_encoder_free(QwenSEANetEncoder * s) {
 
 // SEANet ResNet forward: skip; ELU; conv k=3,s=1,d=1, dim->dim/2; ELU;
 // conv k=1, dim/2->dim; add(skip).
-static struct ggml_tensor * qwen_seanet_resnet_forward(struct ggml_context *    ctx,
-                                                       const QwenSEANetResNet * ru,
-                                                       struct ggml_tensor *     x,
-                                                       int                      residual_kernel_size) {
+static struct ggml_tensor * seanet_resnet_forward(struct ggml_context *    ctx,
+                                                  const QwenSEANetResNet * ru,
+                                                  struct ggml_tensor *     x,
+                                                  int                      residual_kernel_size) {
     struct ggml_tensor * skip = x;
     x                         = ggml_elu(ctx, x);
     x                         = qwen_causal_conv1d(ctx, ru->c0_w, ru->c0_b, x, residual_kernel_size, 1, 1);
@@ -195,22 +195,22 @@ static struct ggml_tensor * qwen_seanet_resnet_forward(struct ggml_context *    
 //   stage1_out  : post stage 1 (resnet + ELU + downsample 5x), [T_audio/20, 256]
 //   stage3_out  : post stage 3 (resnet + ELU + downsample 8x), [T_audio/960, 1024]
 // Returns [T_audio / 960, 512] f32 T-first.
-static struct ggml_tensor * qwen_seanet_encoder_forward(struct ggml_context *     ctx,
-                                                        const QwenSEANetEncoder * s,
-                                                        struct ggml_tensor *      x,
-                                                        struct ggml_tensor **     init_out    = NULL,
-                                                        struct ggml_tensor **     resnet0_out = NULL,
-                                                        struct ggml_tensor **     stage0_out  = NULL,
-                                                        struct ggml_tensor **     stage1_out  = NULL,
-                                                        struct ggml_tensor **     stage3_out  = NULL) {
+static struct ggml_tensor * seanet_encoder_forward(struct ggml_context *     ctx,
+                                                   const QwenSEANetEncoder * s,
+                                                   struct ggml_tensor *      x,
+                                                   struct ggml_tensor **     init_out    = NULL,
+                                                   struct ggml_tensor **     resnet0_out = NULL,
+                                                   struct ggml_tensor **     stage0_out  = NULL,
+                                                   struct ggml_tensor **     stage1_out  = NULL,
+                                                   struct ggml_tensor **     stage3_out  = NULL) {
     x = qwen_causal_conv1d(ctx, s->init_w, s->init_b, x, s->kernel_size, 1, 1);
     if (init_out) {
         *init_out = x;
     }
 
-    for (int i = 0; i < QWEN_SEANET_NUM_STAGES; i++) {
+    for (int i = 0; i < SEANET_NUM_STAGES; i++) {
         const QwenSEANetStage & stg = s->stages[i];
-        x                           = qwen_seanet_resnet_forward(ctx, &stg.resnet, x, s->residual_kernel_size);
+        x                           = seanet_resnet_forward(ctx, &stg.resnet, x, s->residual_kernel_size);
         if (i == 0 && resnet0_out) {
             *resnet0_out = x;
         }

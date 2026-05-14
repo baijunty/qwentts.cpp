@@ -22,7 +22,7 @@
 #include <string>
 #include <vector>
 
-#define QWEN_TOKENIZER_TRANSFORMER_MAX_LAYERS 16
+#define TOK_TRANS_MAX_LAYERS 16
 
 struct QwenTransformerAttention {
     struct ggml_tensor * q_proj_w;  // [hidden, num_q_heads * head_dim]
@@ -60,7 +60,7 @@ struct QwenTokenizerTransformer {
 
     struct ggml_tensor * input_proj_w;   // [latent_dim, hidden]
     struct ggml_tensor * input_proj_b;   // [hidden]
-    QwenTransformerLayer layers[QWEN_TOKENIZER_TRANSFORMER_MAX_LAYERS];
+    QwenTransformerLayer layers[TOK_TRANS_MAX_LAYERS];
     struct ggml_tensor * norm_w;         // [hidden]
     struct ggml_tensor * output_proj_w;  // [hidden, latent_dim]
     struct ggml_tensor * output_proj_b;  // [latent_dim]
@@ -72,9 +72,7 @@ struct QwenTokenizerTransformer {
 // Read decoder hyperparameters from GGUF metadata, allocate every weight
 // tensor on the backend, and bind tensor pointers in the struct. Returns
 // true on success.
-static bool qwen_tokenizer_transformer_load(QwenTokenizerTransformer * tr,
-                                            const GGUFModel &          gf,
-                                            ggml_backend_t             backend) {
+static bool tok_trans_load(QwenTokenizerTransformer * tr, const GGUFModel & gf, ggml_backend_t backend) {
     tr->hidden_size         = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.hidden_size");
     tr->latent_dim          = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.latent_dim");
     tr->num_layers          = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.num_hidden_layers");
@@ -86,9 +84,9 @@ static bool qwen_tokenizer_transformer_load(QwenTokenizerTransformer * tr,
     tr->rope_theta          = gf_get_f32(gf, "qwen3-tts-tokenizer.decoder.rope_theta");
     tr->rms_norm_eps        = gf_get_f32(gf, "qwen3-tts-tokenizer.decoder.rms_norm_eps");
 
-    if (tr->num_layers > QWEN_TOKENIZER_TRANSFORMER_MAX_LAYERS) {
+    if (tr->num_layers > TOK_TRANS_MAX_LAYERS) {
         fprintf(stderr, "[Transformer] FATAL: %d layers exceeds compile-time max %d\n", tr->num_layers,
-                QWEN_TOKENIZER_TRANSFORMER_MAX_LAYERS);
+                TOK_TRANS_MAX_LAYERS);
         return false;
     }
 
@@ -152,7 +150,7 @@ static bool qwen_tokenizer_transformer_load(QwenTokenizerTransformer * tr,
     return true;
 }
 
-static void qwen_tokenizer_transformer_free(QwenTokenizerTransformer * tr) {
+static void tok_trans_free(QwenTokenizerTransformer * tr) {
     if (tr->weight_buf) {
         ggml_backend_buffer_free(tr->weight_buf);
         tr->weight_buf = NULL;
@@ -168,7 +166,7 @@ static void qwen_tokenizer_transformer_free(QwenTokenizerTransformer * tr) {
 // dst[q * T + k] is the additive bias for query q attending to key k.
 // Causal sliding window: mask[k, q] = 0 if (k <= q AND q - k < window),
 // else -inf.
-static void qwen_build_causal_sliding_mask(int T, int sliding_window, std::vector<float> & dst) {
+static void tok_trans_build_causal_sliding_mask(int T, int sliding_window, std::vector<float> & dst) {
     dst.assign((size_t) T * (size_t) T, -INFINITY);
     for (int q = 0; q < T; q++) {
         int k_min = q - sliding_window + 1;
@@ -181,7 +179,7 @@ static void qwen_build_causal_sliding_mask(int T, int sliding_window, std::vecto
     }
 }
 
-static void qwen_build_positions(int T, std::vector<int32_t> & dst) {
+static void tok_trans_build_positions(int T, std::vector<int32_t> & dst) {
     dst.resize((size_t) T);
     for (int i = 0; i < T; i++) {
         dst[i] = i;
@@ -190,13 +188,13 @@ static void qwen_build_positions(int T, std::vector<int32_t> & dst) {
 
 // One transformer layer: attention block then MLP block, both with
 // pre-RMSNorm, post-LayerScale and residual connection.
-static struct ggml_tensor * qwen_transformer_layer_forward(struct ggml_context *            ctx,
-                                                           const QwenTokenizerTransformer * tr,
-                                                           const QwenTransformerLayer &     layer,
-                                                           struct ggml_tensor *             x,
-                                                           struct ggml_tensor *             positions,
-                                                           struct ggml_tensor *             mask,
-                                                           int                              T) {
+static struct ggml_tensor * tok_trans_layer_forward(struct ggml_context *            ctx,
+                                                    const QwenTokenizerTransformer * tr,
+                                                    const QwenTransformerLayer &     layer,
+                                                    struct ggml_tensor *             x,
+                                                    struct ggml_tensor *             positions,
+                                                    struct ggml_tensor *             mask,
+                                                    int                              T) {
     int hidden    = tr->hidden_size;
     int n_q_heads = tr->num_attention_heads;
     int n_kv      = tr->num_kv_heads;
@@ -269,11 +267,11 @@ static struct ggml_tensor * qwen_transformer_layer_forward(struct ggml_context *
 // positions: [T] i32
 // mask      : [T, T] f32, additive (-inf where masked)
 // returns   : [latent_dim, T] f32
-static struct ggml_tensor * qwen_tokenizer_transformer_forward(struct ggml_context *            ctx,
-                                                               const QwenTokenizerTransformer * tr,
-                                                               struct ggml_tensor *             x,
-                                                               struct ggml_tensor *             positions,
-                                                               struct ggml_tensor *             mask) {
+static struct ggml_tensor * tok_trans_forward(struct ggml_context *            ctx,
+                                              const QwenTokenizerTransformer * tr,
+                                              struct ggml_tensor *             x,
+                                              struct ggml_tensor *             positions,
+                                              struct ggml_tensor *             mask) {
     int T = (int) x->ne[1];
 
     // input_proj: [latent_dim, T] -> [hidden, T]
@@ -281,7 +279,7 @@ static struct ggml_tensor * qwen_tokenizer_transformer_forward(struct ggml_conte
     h                      = ggml_add(ctx, h, tr->input_proj_b);
 
     for (int l = 0; l < tr->num_layers; l++) {
-        h = qwen_transformer_layer_forward(ctx, tr, tr->layers[l], h, positions, mask, T);
+        h = tok_trans_layer_forward(ctx, tr, tr->layers[l], h, positions, mask, T);
     }
 
     h = ggml_rms_norm(ctx, h, tr->rms_norm_eps);

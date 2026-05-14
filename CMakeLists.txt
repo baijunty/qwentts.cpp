@@ -92,8 +92,8 @@ endmacro()
 # Core library always STATIC : the bundled CLI tools include
 # pipeline-tts.h / pipeline-codec.h / backend.h directly for the tests
 # paths that need every pipeline_* / backend_* symbol resolved without
-# going through the public ABI. QWENTTS_STATIC is propagated PUBLIC :
-# the lib's own .cpp files see it (so QWEN_API resolves to empty when
+# going through the public ABI. QWEN_STATIC is propagated PUBLIC :
+# the lib's own .cpp files see it (so QT_API resolves to empty when
 # compiling qwen.cpp on Windows), and every consumer that links
 # qwen-core inherits it too (same effect on their side, no spurious
 # dllimport on a static archive). The shared library for ABI consumers
@@ -103,24 +103,24 @@ add_library(qwen-core STATIC
     src/pipeline-tts.cpp
     src/pipeline-codec.cpp
 )
-target_compile_definitions(qwen-core PUBLIC QWENTTS_STATIC)
+target_compile_definitions(qwen-core PUBLIC QWEN_STATIC)
 target_include_directories(qwen-core PUBLIC src)
 target_link_libraries(qwen-core PUBLIC ggml)
 link_ggml_backends(qwen-core)
 
 # Public shared library for ABI consumers (Python ctypes, Rust bindgen,
 # Go cgo). Opt-in : -DQWENTTS_SHARED=ON at configure time. Exports only
-# the QWEN_API-marked symbols ; every internal pipeline_* / backend_*
+# the QT_API-marked symbols ; every internal pipeline_* / backend_*
 # stays hidden inside the .so. Intentionally a different target name
 # from qwen-core so the static path used by the tools is never affected.
-option(QWENTTS_SHARED "Build the shared qwen library for ABI consumers" OFF)
-if(QWENTTS_SHARED)
+option(QWEN_SHARED "Build the shared qwen library for ABI consumers" OFF)
+if(QWEN_SHARED)
     add_library(qwen SHARED
         src/qwen.cpp
         src/pipeline-tts.cpp
         src/pipeline-codec.cpp
     )
-    target_compile_definitions(qwen PRIVATE QWENTTS_BUILD)
+    target_compile_definitions(qwen PRIVATE QWEN_BUILD)
     set_target_properties(qwen PROPERTIES
         C_VISIBILITY_PRESET       hidden
         CXX_VISIBILITY_PRESET     hidden

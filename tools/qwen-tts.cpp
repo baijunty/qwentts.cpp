@@ -1,18 +1,19 @@
 // qwen-tts.cpp: thin CLI wrapper around the qwentts.cpp public ABI.
 // Parses arguments, reads the optional reference WAV plus transcript,
-// hands off to qwen_synthesize and writes the resulting waveform as a
+// hands off to qt_synthesize and writes the resulting waveform as a
 // WAV file. All synthesis logic, mode validation and seed resolution
 // live behind the qwen_* facade declared in qwen.h.
 //
 // Talker variants: 0.6B-Base / 0.6B-CustomVoice / 1.7B-Base /
 // 1.7B-CustomVoice / 1.7B-VoiceDesign. The decoder path is selected
-// from GGUF metadata at qwen_init time. The CLI surface mirrors the
+// from GGUF metadata at qt_init time. The CLI surface mirrors the
 // omnivoice.cpp tooling: kebab-case flags, --format wav16/wav24/wav32,
 // -o '-' streams to stdout, --seed -1 means non deterministic
-// (resolved inside qwen_synthesize), the utterance text comes from
+// (resolved inside qt_synthesize), the utterance text comes from
 // --text or stdin if --text is absent.
 
 #include "audio-io.h"
+#include "pipeline-codec.h"
 #include "qwen.h"
 
 #include <cstdio>
@@ -23,14 +24,8 @@
 #include <sstream>
 #include <string>
 
-// Tokenizer sample rate for the 12 Hz Qwen3-TTS codec: 24 kHz. Used
-// by audio_read_mono to resample the optional --ref-wav file before
-// handing it to the facade. The output sample rate is reported by
-// qwen_audio.sample_rate after a successful synthesis.
-static const int QWEN_TTS_SAMPLE_RATE = 24000;
-
 static void print_usage(const char * prog) {
-    fprintf(stderr, "qwentts.cpp %s\n\n", qwen_version());
+    fprintf(stderr, "qwentts.cpp %s\n\n", qt_version());
     fprintf(stderr,
             "Usage: %s --model <gguf> --codec <gguf> [options] -o <out.wav>\n\n"
             "Required:\n"
@@ -212,16 +207,16 @@ static bool parse_args(int argc, char ** argv, Args & a) {
 static int run(const Args & a) {
     // Init the facade. The seven mode validations
     // (base / custom_voice / voice_design rules) and the BPE tokenizer
-    // load live inside qwen_init / qwen_synthesize; the CLI just hands
-    // off the two GGUF paths and reports qwen_last_error on failure.
-    qwen_init_params iparams;
-    qwen_init_default_params(&iparams);
+    // load live inside qt_init / qt_synthesize; the CLI just hands
+    // off the two GGUF paths and reports qt_last_error on failure.
+    qt_init_params iparams;
+    qt_init_default_params(&iparams);
     iparams.talker_path = a.model;
     iparams.codec_path  = a.codec;
 
-    qwen_context * q = qwen_init(&iparams);
+    qt_context * q = qt_init(&iparams);
     if (!q) {
-        fprintf(stderr, "[CLI] ERROR: %s\n", qwen_last_error());
+        fprintf(stderr, "[CLI] ERROR: %s\n", qt_last_error());
         return 1;
     }
 
@@ -231,12 +226,12 @@ static int run(const Args & a) {
     const char * ref_text = NULL;
     if (a.ref_text_path) {
         if (!read_text_file(a.ref_text_path, ref_text_buf)) {
-            qwen_free(q);
+            qt_free(q);
             return 1;
         }
         if (ref_text_buf.empty()) {
             fprintf(stderr, "[CLI] ERROR: --ref-text file '%s' is empty\n", a.ref_text_path);
-            qwen_free(q);
+            qt_free(q);
             return 1;
         }
         ref_text = ref_text_buf.c_str();
@@ -251,13 +246,13 @@ static int run(const Args & a) {
     int                                      ref_n_samples = 0;
     if (a.ref_wav) {
         int     T_in = 0;
-        float * raw  = audio_read_mono(a.ref_wav, QWEN_TTS_SAMPLE_RATE, &T_in);
+        float * raw  = audio_read_mono(a.ref_wav, TOKENIZER_SAMPLE_RATE, &T_in);
         if (!raw || T_in <= 0) {
             fprintf(stderr, "[CLI] ERROR: cannot read --ref-wav '%s'\n", a.ref_wav);
             if (raw) {
                 std::free(raw);
             }
-            qwen_free(q);
+            qt_free(q);
             return 1;
         }
         raw_holder.reset(raw);
@@ -270,7 +265,7 @@ static int run(const Args & a) {
     WavFormat wav_fmt;
     if (!audio_parse_format(a.format, wav_fmt)) {
         fprintf(stderr, "[CLI] ERROR: invalid --format '%s' (expected wav16, wav24, wav32)\n", a.format);
-        qwen_free(q);
+        qt_free(q);
         return 1;
     }
 
@@ -282,16 +277,16 @@ static int run(const Args & a) {
         text_buf = read_stdin_text();
         if (text_buf.empty()) {
             fprintf(stderr, "[CLI] ERROR: no --text and stdin is empty\n");
-            qwen_free(q);
+            qt_free(q);
             return 1;
         }
         text = text_buf.c_str();
     }
 
     // Translate CLI args into the facade params. Seed -1 is forwarded
-    // verbatim and resolved by qwen_synthesize via std::random_device.
-    qwen_tts_params params;
-    qwen_tts_default_params(&params);
+    // verbatim and resolved by qt_synthesize via std::random_device.
+    qt_tts_params params;
+    qt_tts_default_params(&params);
     params.text                  = text;
     params.lang                  = a.lang;
     params.instruct              = a.instruct;
@@ -312,12 +307,12 @@ static int run(const Args & a) {
     params.subtalker_top_p       = a.subtalker_top_p;
     params.dump_dir              = a.dump_dir;
 
-    qwen_audio  audio  = {};
-    qwen_status status = qwen_synthesize(q, &params, &audio);
-    if (status != QWEN_STATUS_OK) {
-        fprintf(stderr, "[CLI] ERROR: %s\n", qwen_last_error());
-        qwen_audio_free(&audio);
-        qwen_free(q);
+    qt_audio  audio  = {};
+    qt_status status = qt_synthesize(q, &params, &audio);
+    if (status != QT_STATUS_OK) {
+        fprintf(stderr, "[CLI] ERROR: %s\n", qt_last_error());
+        qt_audio_free(&audio);
+        qt_free(q);
         return 1;
     }
 
@@ -325,16 +320,16 @@ static int run(const Args & a) {
         const char * out_path = a.out_wav ? a.out_wav : "out.wav";
         if (!audio_write_wav(out_path, audio.samples, audio.n_samples, audio.sample_rate, wav_fmt)) {
             fprintf(stderr, "[Pipeline] FATAL: WAV write failed for %s\n", out_path);
-            qwen_audio_free(&audio);
-            qwen_free(q);
+            qt_audio_free(&audio);
+            qt_free(q);
             return 1;
         }
         fprintf(stderr, "[Pipeline] Wrote %d samples (%.2f s) -> %s\n", audio.n_samples,
                 (double) audio.n_samples / (double) audio.sample_rate, out_path);
     }
 
-    qwen_audio_free(&audio);
-    qwen_free(q);
+    qt_audio_free(&audio);
+    qt_free(q);
     return 0;
 }
 
@@ -345,9 +340,9 @@ int main(int argc, char ** argv) {
         return 1;
     }
     // The facade absorbs every std::exception thrown deep in the load
-    // and synthesis chains, converting them into qwen_status + a
-    // qwen_last_error message. No top-level try / catch needed here :
-    // the CLI just reads the status returned by qwen_init /
-    // qwen_synthesize and renders qwen_last_error to stderr.
+    // and synthesis chains, converting them into qt_status + a
+    // qt_last_error message. No top-level try / catch needed here :
+    // the CLI just reads the status returned by qt_init /
+    // qt_synthesize and renders qt_last_error to stderr.
     return run(a);
 }

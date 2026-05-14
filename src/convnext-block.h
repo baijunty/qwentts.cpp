@@ -21,7 +21,7 @@
 #include <cstdlib>
 #include <string>
 
-#define QWEN_UPSAMPLE_MAX_BLOCKS 2
+#define UPSAMPLE_MAX_BLOCKS 2
 
 struct QwenConvNeXtBlock {
     struct ggml_tensor * dwconv_w;   // [K=7, 1, C] depthwise weight
@@ -36,14 +36,14 @@ struct QwenConvNeXtBlock {
 };
 
 struct QwenUpsampleStage {
-    int num_blocks;                                              // 2
-    int channels;                                                // 1024 (= latent_dim)
-    int upsample_ratio;                                          // 2 per block, 4x total
-    int dwconv_kernel;                                           // 7
+    int num_blocks;                                         // 2
+    int channels;                                           // 1024 (= latent_dim)
+    int upsample_ratio;                                     // 2 per block, 4x total
+    int dwconv_kernel;                                      // 7
 
-    struct ggml_tensor * transconv_w[QWEN_UPSAMPLE_MAX_BLOCKS];  // pre-permuted [IC, K*OC]
-    struct ggml_tensor * transconv_b[QWEN_UPSAMPLE_MAX_BLOCKS];  // [OC]
-    QwenConvNeXtBlock    convnext[QWEN_UPSAMPLE_MAX_BLOCKS];
+    struct ggml_tensor * transconv_w[UPSAMPLE_MAX_BLOCKS];  // pre-permuted [IC, K*OC]
+    struct ggml_tensor * transconv_b[UPSAMPLE_MAX_BLOCKS];  // [OC]
+    QwenConvNeXtBlock    convnext[UPSAMPLE_MAX_BLOCKS];
 
     struct ggml_context * weight_ctx;
     ggml_backend_buffer_t weight_buf;
@@ -51,15 +51,15 @@ struct QwenUpsampleStage {
 
 // Read upsample hyperparameters from GGUF metadata, allocate every weight
 // tensor on the backend, and bind tensor pointers in the struct.
-static bool qwen_upsample_stage_load(QwenUpsampleStage * stage, const GGUFModel & gf, ggml_backend_t backend) {
+static bool upsample_stage_load(QwenUpsampleStage * stage, const GGUFModel & gf, ggml_backend_t backend) {
     stage->channels       = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.latent_dim");
     stage->dwconv_kernel  = 7;
     stage->upsample_ratio = 2;
     stage->num_blocks     = 2;
 
-    if (stage->num_blocks > QWEN_UPSAMPLE_MAX_BLOCKS) {
+    if (stage->num_blocks > UPSAMPLE_MAX_BLOCKS) {
         fprintf(stderr, "[Upsample] FATAL: %d blocks exceeds compile-time max %d\n", stage->num_blocks,
-                QWEN_UPSAMPLE_MAX_BLOCKS);
+                UPSAMPLE_MAX_BLOCKS);
         return false;
     }
 
@@ -110,7 +110,7 @@ static bool qwen_upsample_stage_load(QwenUpsampleStage * stage, const GGUFModel 
     return true;
 }
 
-static void qwen_upsample_stage_free(QwenUpsampleStage * stage) {
+static void upsample_stage_free(QwenUpsampleStage * stage) {
     if (stage->weight_buf) {
         ggml_backend_buffer_free(stage->weight_buf);
         stage->weight_buf = NULL;
@@ -124,10 +124,10 @@ static void qwen_upsample_stage_free(QwenUpsampleStage * stage) {
 // One ConvNeXt block forward.
 //   x: [T, C] f32 T-first
 // returns [T, C] f32 T-first
-static struct ggml_tensor * qwen_convnext_block_forward(struct ggml_context *     ctx,
-                                                        const QwenConvNeXtBlock & block,
-                                                        struct ggml_tensor *      x,
-                                                        int                       kernel) {
+static struct ggml_tensor * convnext_block_forward(struct ggml_context *     ctx,
+                                                   const QwenConvNeXtBlock & block,
+                                                   struct ggml_tensor *      x,
+                                                   int                       kernel) {
     int T = (int) x->ne[0];
     int C = (int) x->ne[1];
 
@@ -178,14 +178,14 @@ static struct ggml_tensor * qwen_convnext_block_forward(struct ggml_context *   
 // The top-level upsample stage uses kernel == stride (no causal trim).
 // The DAC decoder blocks (separate header) use kernel == 2 * stride
 // with a stride-frame causal trim.
-static struct ggml_tensor * qwen_upsample_stage_forward(struct ggml_context *     ctx,
-                                                        const QwenUpsampleStage * stage,
-                                                        struct ggml_tensor *      x) {
+static struct ggml_tensor * upsample_stage_forward(struct ggml_context *     ctx,
+                                                   const QwenUpsampleStage * stage,
+                                                   struct ggml_tensor *      x) {
     int kernel = stage->upsample_ratio;
     for (int i = 0; i < stage->num_blocks; i++) {
         x = qwen_causal_trans_conv1d(ctx, stage->transconv_w[i], stage->transconv_b[i], x, stage->upsample_ratio,
                                      kernel, stage->channels);
-        x = qwen_convnext_block_forward(ctx, stage->convnext[i], x, stage->dwconv_kernel);
+        x = convnext_block_forward(ctx, stage->convnext[i], x, stage->dwconv_kernel);
     }
     return x;
 }

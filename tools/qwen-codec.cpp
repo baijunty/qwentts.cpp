@@ -23,7 +23,7 @@
 #include <string>
 #include <vector>
 
-static const uint32_t QWEN_RVQ_CODE_MASK = (1u << QWEN_TOKENIZER_CODE_BITS) - 1u;
+static const uint32_t RVQ_CODE_MASK = (1u << TOKENIZER_CODE_BITS) - 1u;
 
 static void print_usage(const char * prog) {
     fprintf(stderr, "qwentts.cpp %s\n\n", QWEN_VERSION);
@@ -46,13 +46,13 @@ static std::vector<int32_t> unpack_codes(const std::vector<uint8_t> & in, size_t
     int                  bits_in_acc = 0;
     size_t               in_pos      = 0;
     for (size_t i = 0; i < n_codes; i++) {
-        while (bits_in_acc < QWEN_TOKENIZER_CODE_BITS && in_pos < in.size()) {
+        while (bits_in_acc < TOKENIZER_CODE_BITS && in_pos < in.size()) {
             acc |= ((uint64_t) in[in_pos++]) << bits_in_acc;
             bits_in_acc += 8;
         }
-        out[i] = (int32_t) (acc & QWEN_RVQ_CODE_MASK);
-        acc >>= QWEN_TOKENIZER_CODE_BITS;
-        bits_in_acc -= QWEN_TOKENIZER_CODE_BITS;
+        out[i] = (int32_t) (acc & RVQ_CODE_MASK);
+        acc >>= TOKENIZER_CODE_BITS;
+        bits_in_acc -= TOKENIZER_CODE_BITS;
     }
     return out;
 }
@@ -60,14 +60,14 @@ static std::vector<int32_t> unpack_codes(const std::vector<uint8_t> & in, size_t
 // Pack flat int32 codes into 11-bit LSB-first packed bytes. Output size is
 // ceil(N * 11 / 8) bytes.
 static std::vector<uint8_t> pack_codes(const std::vector<int32_t> & codes) {
-    const size_t         total_bits = codes.size() * (size_t) QWEN_TOKENIZER_CODE_BITS;
+    const size_t         total_bits = codes.size() * (size_t) TOKENIZER_CODE_BITS;
     std::vector<uint8_t> out((total_bits + 7) / 8, 0);
     uint64_t             acc         = 0;
     int                  bits_in_acc = 0;
     size_t               out_pos     = 0;
     for (size_t i = 0; i < codes.size(); i++) {
-        acc |= ((uint64_t) ((uint32_t) codes[i] & QWEN_RVQ_CODE_MASK)) << bits_in_acc;
-        bits_in_acc += QWEN_TOKENIZER_CODE_BITS;
+        acc |= ((uint64_t) ((uint32_t) codes[i] & RVQ_CODE_MASK)) << bits_in_acc;
+        bits_in_acc += TOKENIZER_CODE_BITS;
         while (bits_in_acc >= 8) {
             out[out_pos++] = (uint8_t) (acc & 0xFF);
             acc >>= 8;
@@ -81,7 +81,7 @@ static std::vector<uint8_t> pack_codes(const std::vector<int32_t> & codes) {
 }
 
 // Read a .rvq file and unpack it into K*T codes. T is inferred from the
-// file size: T = (filesize * 8) / (K * QWEN_TOKENIZER_CODE_BITS).
+// file size: T = (filesize * 8) / (K * TOKENIZER_CODE_BITS).
 static bool read_rvq(const char * path, int K, std::vector<int32_t> & codes, int * n_frames) {
     FILE * f = utf8_fopen(path, "rb");
     if (!f) {
@@ -105,7 +105,7 @@ static bool read_rvq(const char * path, int K, std::vector<int32_t> & codes, int
     fclose(f);
 
     const size_t total_bits = (size_t) sz * 8;
-    const size_t n_codes    = total_bits / (size_t) QWEN_TOKENIZER_CODE_BITS;
+    const size_t n_codes    = total_bits / (size_t) TOKENIZER_CODE_BITS;
     if (n_codes == 0 || (n_codes % (size_t) K) != 0) {
         fprintf(stderr, "[Codec] FATAL: %s yields %zu codes, not a multiple of K=%d\n", path, n_codes, K);
         return false;
@@ -221,14 +221,14 @@ int main(int argc, char ** argv) {
         const std::string out_str = swap_ext(input_path, ".rvq");
 
         int     T_in     = 0;
-        float * audio_in = audio_read_mono(input_path, QWEN_TOKENIZER_SAMPLE_RATE, &T_in);
+        float * audio_in = audio_read_mono(input_path, TOKENIZER_SAMPLE_RATE, &T_in);
         if (!audio_in || T_in <= 0) {
             fprintf(stderr, "[Codec] FATAL: cannot read %s\n", input_path);
             free(audio_in);
             rc = 1;
         } else {
             // Pad to a multiple of HOP_LENGTH so the RVQ frame count is integral.
-            int hop      = QWEN_TOKENIZER_HOP_LENGTH;
+            int hop      = TOKENIZER_HOP_LENGTH;
             int T_padded = ((T_in + hop - 1) / hop) * hop;
             int T_frames = T_padded / hop;
 
@@ -237,8 +237,8 @@ int main(int argc, char ** argv) {
             free(audio_in);
 
             fprintf(stderr, "[Codec] Encode: %s, %d samples @ %d Hz, padded to %d (%d frames @ 12.5 Hz, %.2f s)\n",
-                    input_path, T_in, QWEN_TOKENIZER_SAMPLE_RATE, T_padded, T_frames,
-                    (double) T_padded / (double) QWEN_TOKENIZER_SAMPLE_RATE);
+                    input_path, T_in, TOKENIZER_SAMPLE_RATE, T_padded, T_frames,
+                    (double) T_padded / (double) TOKENIZER_SAMPLE_RATE);
 
             std::vector<int32_t> codes = pipeline_codec_encode(&pc, audio_buf.data(), T_padded);
             if (codes.empty()) {
@@ -248,8 +248,8 @@ int main(int argc, char ** argv) {
                 rc = 1;
             } else {
                 fprintf(stderr, "[Codec] Wrote %s: K=%d T=%d, %zu codes -> %zu packed bytes\n", out_str.c_str(),
-                        QWEN_TOKENIZER_NUM_CODEBOOKS, T_frames, codes.size(),
-                        (codes.size() * (size_t) QWEN_TOKENIZER_CODE_BITS + 7) / 8);
+                        TOKENIZER_NUM_CODEBOOKS, T_frames, codes.size(),
+                        (codes.size() * (size_t) TOKENIZER_CODE_BITS + 7) / 8);
             }
         }
     } else {
@@ -258,23 +258,23 @@ int main(int argc, char ** argv) {
 
         std::vector<int32_t> codes;
         int                  T = 0;
-        if (!read_rvq(input_path, QWEN_TOKENIZER_NUM_CODEBOOKS, codes, &T)) {
+        if (!read_rvq(input_path, TOKENIZER_NUM_CODEBOOKS, codes, &T)) {
             rc = 1;
         } else {
-            fprintf(stderr, "[Codec] Decode: %s, K=%d T=%d (%.2f s)\n", input_path, QWEN_TOKENIZER_NUM_CODEBOOKS, T,
-                    (double) (T * QWEN_TOKENIZER_HOP_LENGTH) / (double) QWEN_TOKENIZER_SAMPLE_RATE);
+            fprintf(stderr, "[Codec] Decode: %s, K=%d T=%d (%.2f s)\n", input_path, TOKENIZER_NUM_CODEBOOKS, T,
+                    (double) (T * TOKENIZER_HOP_LENGTH) / (double) TOKENIZER_SAMPLE_RATE);
 
-            std::vector<float> audio = pipeline_codec_decode(&pc, codes.data(), QWEN_TOKENIZER_NUM_CODEBOOKS, T);
+            std::vector<float> audio = pipeline_codec_decode(&pc, codes.data(), TOKENIZER_NUM_CODEBOOKS, T);
             if (audio.empty()) {
                 fprintf(stderr, "[Codec] FATAL: decode failed\n");
                 rc = 1;
-            } else if (!audio_write_wav(out_str.c_str(), audio.data(), (int) audio.size(), QWEN_TOKENIZER_SAMPLE_RATE,
+            } else if (!audio_write_wav(out_str.c_str(), audio.data(), (int) audio.size(), TOKENIZER_SAMPLE_RATE,
                                         wav_fmt)) {
                 fprintf(stderr, "[Codec] FATAL: cannot write %s\n", out_str.c_str());
                 rc = 1;
             } else {
                 fprintf(stderr, "[Codec] Wrote %s: %d samples @ %d Hz, %.2f s\n", out_str.c_str(), (int) audio.size(),
-                        QWEN_TOKENIZER_SAMPLE_RATE, (double) audio.size() / (double) QWEN_TOKENIZER_SAMPLE_RATE);
+                        TOKENIZER_SAMPLE_RATE, (double) audio.size() / (double) TOKENIZER_SAMPLE_RATE);
             }
         }
     }

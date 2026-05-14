@@ -133,14 +133,14 @@ static struct ggml_tensor * qwen_causal_trans_conv1d(struct ggml_context * ctx,
 //   w: [k, IC, OC] f32, source layout (K, IC, OC) maps to ggml ne directly
 //   b: [OC] f32 or NULL
 //   x: [T, IC] f32 T-first
-//   pad_mode: QWEN_PAD_CONSTANT (zero pad, default for SEANet and the DAC
-//             decoder) or QWEN_PAD_REPLICATE (edge pad, replicates the
+//   pad_mode: CTC_PAD_CONSTANT (zero pad, default for SEANet and the DAC
+//             decoder) or CTC_PAD_REPLICATE (edge pad, replicates the
 //             first / last frame to match Mimi's downsample which is the
 //             only conv passing pad_mode="replicate" upstream).
 // Returns [ceil(T / stride), OC] f32 T-first.
 enum QwenPadMode {
-    QWEN_PAD_CONSTANT  = 0,
-    QWEN_PAD_REPLICATE = 1,
+    CTC_PAD_CONSTANT  = 0,
+    CTC_PAD_REPLICATE = 1,
 };
 
 static struct ggml_tensor * qwen_causal_conv1d(struct ggml_context * ctx,
@@ -150,7 +150,7 @@ static struct ggml_tensor * qwen_causal_conv1d(struct ggml_context * ctx,
                                                int                   k,
                                                int                   d,
                                                int                   s        = 1,
-                                               int                   pad_mode = QWEN_PAD_CONSTANT) {
+                                               int                   pad_mode = CTC_PAD_CONSTANT) {
     int OC          = (int) w->ne[2];
     int kernel_eff  = (k - 1) * d + 1;
     int padding_tot = kernel_eff - s;
@@ -167,7 +167,7 @@ static struct ggml_tensor * qwen_causal_conv1d(struct ggml_context * ctx,
     }
 
     struct ggml_tensor * y = x;
-    if (pad_mode == QWEN_PAD_REPLICATE) {
+    if (pad_mode == CTC_PAD_REPLICATE) {
         // Edge pad: repeat x[t=0] padding_tot times on the left and x[t=T-1]
         // extra_pad times on the right via a single ggml_repeat per side.
         int IC = (int) x->ne[1];

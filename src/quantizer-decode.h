@@ -19,12 +19,12 @@
 #include <cstdlib>
 #include <string>
 
-#define QWEN_RVQ_MAX_CODEBOOKS_PER_GROUP 15
+#define RVQ_MAX_CODEBOOKS_PER_GROUP 15
 
 struct QwenRVQGroup {
     int                  num_codebooks;
-    struct ggml_tensor * embed[QWEN_RVQ_MAX_CODEBOOKS_PER_GROUP];  // each [256, 2048] f32
-    struct ggml_tensor * out_proj_w;                               // [256, 512] f32 (Conv1d 1x1 reshaped)
+    struct ggml_tensor * embed[RVQ_MAX_CODEBOOKS_PER_GROUP];  // each [256, 2048] f32
+    struct ggml_tensor * out_proj_w;                          // [256, 512] f32 (Conv1d 1x1 reshaped)
 };
 
 struct QwenQuantizerDecoder {
@@ -59,7 +59,7 @@ static struct ggml_tensor * qwen_load_proj_1x1(WeightCtx * wctx, const GGUFModel
 // Build the on-backend weights of the split RVQ decoder from a loaded GGUF.
 // Mutates dec->weight_ctx and dec->weight_buf, and binds every group
 // tensor pointer to a backend allocation.
-static bool qwen_quantizer_decoder_load(QwenQuantizerDecoder * dec, const GGUFModel & gf, ggml_backend_t backend) {
+static bool quant_decoder_load(QwenQuantizerDecoder * dec, const GGUFModel & gf, ggml_backend_t backend) {
     dec->num_quantizers          = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.num_quantizers");
     dec->num_semantic_quantizers = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.num_semantic_quantizers");
     dec->num_acoustic_quantizers = dec->num_quantizers - dec->num_semantic_quantizers;
@@ -67,9 +67,9 @@ static bool qwen_quantizer_decoder_load(QwenQuantizerDecoder * dec, const GGUFMo
     dec->codebook_dim_internal   = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.codebook_dim_internal");
     dec->hidden                  = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.decoder.vector_quantization_hidden_dim");
 
-    if (dec->num_acoustic_quantizers > QWEN_RVQ_MAX_CODEBOOKS_PER_GROUP) {
+    if (dec->num_acoustic_quantizers > RVQ_MAX_CODEBOOKS_PER_GROUP) {
         fprintf(stderr, "[Quantizer] FATAL: %d acoustic codebooks exceeds compile-time max %d\n",
-                dec->num_acoustic_quantizers, QWEN_RVQ_MAX_CODEBOOKS_PER_GROUP);
+                dec->num_acoustic_quantizers, RVQ_MAX_CODEBOOKS_PER_GROUP);
         return false;
     }
 
@@ -110,7 +110,7 @@ static bool qwen_quantizer_decoder_load(QwenQuantizerDecoder * dec, const GGUFMo
     return true;
 }
 
-static void qwen_quantizer_decoder_free(QwenQuantizerDecoder * dec) {
+static void quant_decoder_free(QwenQuantizerDecoder * dec) {
     if (dec->weight_buf) {
         ggml_backend_buffer_free(dec->weight_buf);
         dec->weight_buf = NULL;
@@ -127,10 +127,10 @@ static void qwen_quantizer_decoder_free(QwenQuantizerDecoder * dec) {
 //
 // codes_split: [T, K] i32, K is the codebook count of this split
 // returns     : [hidden, T] f32
-static struct ggml_tensor * qwen_rvq_group_decode(struct ggml_context * ctx,
-                                                  const QwenRVQGroup &  g,
-                                                  struct ggml_tensor *  codes_split,
-                                                  int                   T) {
+static struct ggml_tensor * rvq_group_decode(struct ggml_context * ctx,
+                                             const QwenRVQGroup &  g,
+                                             struct ggml_tensor *  codes_split,
+                                             int                   T) {
     struct ggml_tensor * sum = NULL;
     for (int k = 0; k < g.num_codebooks; k++) {
         struct ggml_tensor * idx = ggml_view_1d(ctx, codes_split, T, (size_t) k * codes_split->nb[1]);
@@ -145,9 +145,9 @@ static struct ggml_tensor * qwen_rvq_group_decode(struct ggml_context * ctx,
 
 // codes: [T, num_quantizers=16] i32
 // returns: [hidden=512, T] f32
-static struct ggml_tensor * qwen_quantizer_decode(struct ggml_context *        ctx,
-                                                  const QwenQuantizerDecoder * dec,
-                                                  struct ggml_tensor *         codes) {
+static struct ggml_tensor * quant_decode(struct ggml_context *        ctx,
+                                         const QwenQuantizerDecoder * dec,
+                                         struct ggml_tensor *         codes) {
     int T = (int) codes->ne[0];
     if ((int) codes->ne[1] != dec->num_quantizers) {
         fprintf(stderr, "[Quantizer] FATAL: codes ne[1]=%lld != num_quantizers=%d\n", (long long) codes->ne[1],
@@ -159,8 +159,8 @@ static struct ggml_tensor * qwen_quantizer_decode(struct ggml_context *        c
     size_t               aco_off   = (size_t) dec->num_semantic_quantizers * codes->nb[1];
     struct ggml_tensor * codes_aco = ggml_view_2d(ctx, codes, T, dec->num_acoustic_quantizers, codes->nb[1], aco_off);
 
-    struct ggml_tensor * h_sem = qwen_rvq_group_decode(ctx, dec->semantic, codes_sem, T);
-    struct ggml_tensor * h_aco = qwen_rvq_group_decode(ctx, dec->acoustic, codes_aco, T);
+    struct ggml_tensor * h_sem = rvq_group_decode(ctx, dec->semantic, codes_sem, T);
+    struct ggml_tensor * h_aco = rvq_group_decode(ctx, dec->acoustic, codes_aco, T);
 
     return ggml_add(ctx, h_sem, h_aco);
 }

@@ -30,7 +30,7 @@
 #include <string>
 #include <vector>
 
-#define QWEN_ENCODER_TRANSFORMER_MAX_LAYERS 16
+#define ENC_TRANS_MAX_LAYERS 16
 
 struct QwenEncoderTransformerLayer {
     // Pre-attention LayerNorm
@@ -63,13 +63,13 @@ struct QwenEncoderTransformer {
     float rope_theta;
     float norm_eps;
 
-    QwenEncoderTransformerLayer layers[QWEN_ENCODER_TRANSFORMER_MAX_LAYERS];
+    QwenEncoderTransformerLayer layers[ENC_TRANS_MAX_LAYERS];
 
     struct ggml_context * weight_ctx;
     ggml_backend_buffer_t weight_buf;
 };
 
-static bool qwen_encoder_transformer_load(QwenEncoderTransformer * tr, const GGUFModel & gf, ggml_backend_t backend) {
+static bool enc_trans_load(QwenEncoderTransformer * tr, const GGUFModel & gf, ggml_backend_t backend) {
     tr->hidden_size         = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.hidden_size");
     tr->num_layers          = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.num_hidden_layers");
     tr->num_attention_heads = (int) gf_get_u32(gf, "qwen3-tts-tokenizer.encoder.num_attention_heads");
@@ -79,9 +79,9 @@ static bool qwen_encoder_transformer_load(QwenEncoderTransformer * tr, const GGU
     tr->rope_theta          = gf_get_f32(gf, "qwen3-tts-tokenizer.encoder.rope_theta");
     tr->norm_eps            = gf_get_f32(gf, "qwen3-tts-tokenizer.encoder.norm_eps");
 
-    if (tr->num_layers > QWEN_ENCODER_TRANSFORMER_MAX_LAYERS) {
+    if (tr->num_layers > ENC_TRANS_MAX_LAYERS) {
         fprintf(stderr, "[EncTransformer] FATAL: %d layers exceeds compile-time max %d\n", tr->num_layers,
-                QWEN_ENCODER_TRANSFORMER_MAX_LAYERS);
+                ENC_TRANS_MAX_LAYERS);
         return false;
     }
 
@@ -124,7 +124,7 @@ static bool qwen_encoder_transformer_load(QwenEncoderTransformer * tr, const GGU
     return true;
 }
 
-static void qwen_encoder_transformer_free(QwenEncoderTransformer * tr) {
+static void enc_trans_free(QwenEncoderTransformer * tr) {
     if (tr->weight_buf) {
         ggml_backend_buffer_free(tr->weight_buf);
         tr->weight_buf = NULL;
@@ -140,7 +140,7 @@ static void qwen_encoder_transformer_free(QwenEncoderTransformer * tr) {
 // value but neither MimiAttention's eager forward nor MimiTransformerModel
 // (create_causal_mask) ever apply it. The Qwen3TTS encoder inherits this
 // convention, so we mirror it bit for bit here.
-static void qwen_encoder_build_causal_mask(int T, std::vector<float> & dst) {
+static void enc_trans_build_causal_mask(int T, std::vector<float> & dst) {
     dst.assign((size_t) T * (size_t) T, -INFINITY);
     for (int q = 0; q < T; q++) {
         for (int k = 0; k <= q; k++) {
@@ -149,7 +149,7 @@ static void qwen_encoder_build_causal_mask(int T, std::vector<float> & dst) {
     }
 }
 
-static void qwen_encoder_build_positions(int T, std::vector<int32_t> & dst) {
+static void enc_trans_build_positions(int T, std::vector<int32_t> & dst) {
     dst.resize((size_t) T);
     for (int i = 0; i < T; i++) {
         dst[i] = i;
@@ -163,13 +163,13 @@ static void qwen_encoder_build_positions(int T, std::vector<int32_t> & dst) {
 //   positions: [T] i32
 //   mask      : [T, T] f32 additive
 // Returns [hidden, T] f32 C-first.
-static struct ggml_tensor * qwen_encoder_transformer_layer_forward(struct ggml_context *               ctx,
-                                                                   const QwenEncoderTransformer *      tr,
-                                                                   const QwenEncoderTransformerLayer & layer,
-                                                                   struct ggml_tensor *                x,
-                                                                   struct ggml_tensor *                positions,
-                                                                   struct ggml_tensor *                mask,
-                                                                   int                                 T) {
+static struct ggml_tensor * enc_trans_layer_forward(struct ggml_context *               ctx,
+                                                    const QwenEncoderTransformer *      tr,
+                                                    const QwenEncoderTransformerLayer & layer,
+                                                    struct ggml_tensor *                x,
+                                                    struct ggml_tensor *                positions,
+                                                    struct ggml_tensor *                mask,
+                                                    int                                 T) {
     int hidden    = tr->hidden_size;
     int n_q_heads = tr->num_attention_heads;
     int n_kv      = tr->num_kv_heads;
@@ -233,14 +233,14 @@ static struct ggml_tensor * qwen_encoder_transformer_layer_forward(struct ggml_c
 //   positions: [T] i32
 //   mask      : [T, T] f32 additive
 // Returns [hidden, T] f32 C-first.
-static struct ggml_tensor * qwen_encoder_transformer_forward(struct ggml_context *          ctx,
-                                                             const QwenEncoderTransformer * tr,
-                                                             struct ggml_tensor *           x,
-                                                             struct ggml_tensor *           positions,
-                                                             struct ggml_tensor *           mask) {
+static struct ggml_tensor * enc_trans_forward(struct ggml_context *          ctx,
+                                              const QwenEncoderTransformer * tr,
+                                              struct ggml_tensor *           x,
+                                              struct ggml_tensor *           positions,
+                                              struct ggml_tensor *           mask) {
     int T = (int) x->ne[1];
     for (int l = 0; l < tr->num_layers; l++) {
-        x = qwen_encoder_transformer_layer_forward(ctx, tr, tr->layers[l], x, positions, mask, T);
+        x = enc_trans_layer_forward(ctx, tr, tr->layers[l], x, positions, mask, T);
     }
     return x;
 }

@@ -116,7 +116,7 @@ def install_clone_hooks(model, dump_dir):
     # [4] resnet, [5] ELU, [6] down 5x, [7] resnet, [8] ELU, [9] down 6x,
     # [10] resnet, [11] ELU, [12] down 8x, [13] ELU, [14] last MimiConv1d.
     # We hook the init conv and the three downsample convs the C++ side
-    # exposes as out-params in qwen_seanet_encoder_forward.
+    # exposes as out-params in seanet_encoder_forward.
     sn_layers = enc.encoder.layers
 
     seen_sn_init = {"done": False}

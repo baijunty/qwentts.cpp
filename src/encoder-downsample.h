@@ -24,7 +24,7 @@ struct QwenEncoderDownsample {
     ggml_backend_buffer_t weight_buf;
 };
 
-static bool qwen_encoder_downsample_load(QwenEncoderDownsample * d, const GGUFModel & gf, ggml_backend_t backend) {
+static bool enc_down_load(QwenEncoderDownsample * d, const GGUFModel & gf, ggml_backend_t backend) {
     d->kernel = 4;
     d->stride = 2;
 
@@ -46,7 +46,7 @@ static bool qwen_encoder_downsample_load(QwenEncoderDownsample * d, const GGUFMo
     return true;
 }
 
-static void qwen_encoder_downsample_free(QwenEncoderDownsample * d) {
+static void enc_down_free(QwenEncoderDownsample * d) {
     if (d->weight_buf) {
         ggml_backend_buffer_free(d->weight_buf);
         d->weight_buf = NULL;
@@ -63,8 +63,8 @@ static void qwen_encoder_downsample_free(QwenEncoderDownsample * d) {
 // and the encoder transformer which inherit config.pad_mode='constant'.
 //   x: [T, 512] f32 T-first
 // Returns [ceil(T/2), 512] f32 T-first.
-static struct ggml_tensor * qwen_encoder_downsample_forward(struct ggml_context *         ctx,
-                                                            const QwenEncoderDownsample * d,
-                                                            struct ggml_tensor *          x) {
-    return qwen_causal_conv1d(ctx, d->weight, NULL, x, d->kernel, 1, d->stride, QWEN_PAD_REPLICATE);
+static struct ggml_tensor * enc_down_forward(struct ggml_context *         ctx,
+                                             const QwenEncoderDownsample * d,
+                                             struct ggml_tensor *          x) {
+    return qwen_causal_conv1d(ctx, d->weight, NULL, x, d->kernel, 1, d->stride, CTC_PAD_REPLICATE);
 }

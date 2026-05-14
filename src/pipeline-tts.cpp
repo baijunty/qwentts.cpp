@@ -272,7 +272,7 @@ bool pipeline_tts_synthesize(PipelineTTS *                       pt,
                              const PipelineTTSSynthesizeParams & params,
                              PipelineTTSSynthesizeOutput *       out) {
     out->audio.clear();
-    out->sample_rate = QWEN_TOKENIZER_SAMPLE_RATE;
+    out->sample_rate = TOKENIZER_SAMPLE_RATE;
 
     PromptBuilderOutput prompt;
     const std::string   instruct = params.instruct ? params.instruct : "";
@@ -322,12 +322,12 @@ bool pipeline_tts_synthesize(PipelineTTS *                       pt,
         }
         // The codec hop is 1920 samples at 24 kHz so n_samples must be
         // a multiple of 1920. Truncate to the nearest hop boundary.
-        if (params.ref_n_samples < QWEN_TOKENIZER_HOP_LENGTH) {
+        if (params.ref_n_samples < TOKENIZER_HOP_LENGTH) {
             qt_set_error("pipeline_tts_synthesize: ref_wav too short for ICL (%d samples)", params.ref_n_samples);
             qt_log(QT_LOG_ERROR, "[Pipeline] ref_wav too short for ICL (%d samples)", params.ref_n_samples);
             return false;
         }
-        int aligned_T = (params.ref_n_samples / QWEN_TOKENIZER_HOP_LENGTH) * QWEN_TOKENIZER_HOP_LENGTH;
+        int aligned_T = (params.ref_n_samples / TOKENIZER_HOP_LENGTH) * TOKENIZER_HOP_LENGTH;
         ref_codes     = pipeline_codec_encode(&pt->codec, params.ref_audio_24k, aligned_T, params.dump_dir);
         if (ref_codes.empty()) {
             qt_set_error("pipeline_tts_synthesize: pipeline_codec_encode returned empty codes");
