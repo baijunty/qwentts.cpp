@@ -1,3 +1,4 @@
+[Qwen] qwentts.cpp a62fde6 (2026-05-30)
 ggml_cuda_init: found 1 CUDA devices (Total VRAM: 97247 MiB):
   Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97247 MiB
 load_backend: loaded CUDA backend from /mnt/workspace/qwentts.cpp/build/libggml-cuda.so
@@ -32,21 +33,21 @@ load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-c
 [Pipeline] Ready: hop 1920 samples @ 24000 Hz mono, 16 codebooks @ 12.5 Hz
 [KVCache] Allocated: 28 layers, 8 KV heads, head_dim 128, max_seq_len 4096 -> 896 MB
 [KVCache] Allocated: 5 layers, 8 KV heads, head_dim 128, max_seq_len 16 -> 0 MB
-[Pipeline] Loaded: arch=1b7 variant=custom_voice tokenizer=qwen3_tts_tokenizer_12hz codebooks=16 speaker_encoder=absent speakers=9
+[Pipeline] Loaded: arch=1b7 variant=custom_voice tokenizer=qwen3_tts_tokenizer_12hz codebooks=16 speaker_encoder=absent speakers=9 fa=off clamp_fp16=off
 [BPE] Loaded from GGUF: 151676 vocab, 151291 merges, eos_id=151643
 [BPE] Registered 5 arch special tokens (total specials=6)
 [Prompt] Built: 38 ids, N_text=30, N_instruct=0, T_ctx=41, hidden=2048, lang=english (id=2050), speaker=vivian (id=3065) ref_spk_emb=no icl=no
 [Debug] prompt-ids: [38] first4: 151644.000000 77091.000000 198.000000 80.000000
-[Debug] talker-input-embed: [41, 2048] first4: 0.021550 -0.009399 0.007126 -0.019719
+[Debug] talker-input-embed: [41, 2048] first4: 0.021552 -0.009410 0.007135 -0.019698
 [Debug] trailing-text-hidden: [1, 2048] first4: -0.003715 0.008406 -0.005009 -0.000409
 [Debug] tts-pad-embed: [2048] first4: -0.003715 0.008406 -0.005009 -0.000409
-[Debug] talker-hidden-prefill-l0: [41, 2048] first4: -0.383354 -0.060806 0.002336 -0.013838
-[Debug] talker-hidden-prefill-l7: [41, 2048] first4: -1.343848 0.256815 1.585862 2.190261
-[Debug] talker-hidden-prefill-l14: [41, 2048] first4: -1.103534 0.419664 1.685469 2.136022
-[Debug] talker-hidden-prefill-l21: [41, 2048] first4: -0.675360 0.328115 2.041473 1.583337
-[Debug] talker-hidden-prefill-l27: [41, 2048] first4: -0.927499 -24.485857 -2.206259 26.156494
-[Debug] talker-hidden-prefill-final: [41, 2048] first4: -0.028593 -0.788262 -0.063200 0.735004
-[Debug] talker-logits-prefill: [3072] first4: -0.728725 -8.061918 -2.771915 -5.009385
+[Debug] talker-hidden-prefill-l0: [41, 2048] first4: -0.383357 -0.060985 0.002495 -0.013938
+[Debug] talker-hidden-prefill-l7: [41, 2048] first4: -1.343998 0.257653 1.585138 2.188510
+[Debug] talker-hidden-prefill-l14: [41, 2048] first4: -1.103574 0.420691 1.684746 2.134346
+[Debug] talker-hidden-prefill-l21: [41, 2048] first4: -0.675023 0.329176 2.039755 1.581703
+[Debug] talker-hidden-prefill-l27: [41, 2048] first4: -0.922810 -24.485685 -2.208501 26.157312
+[Debug] talker-hidden-prefill-final: [41, 2048] first4: -0.028449 -0.788258 -0.063265 0.735029
+[Debug] talker-logits-prefill: [3072] first4: -0.719778 -8.089520 -2.783427 -5.020406
 [Sample] step=0 c0=1995 u=-1.0000000000 subseq=0
 [Sample-CP] g=0 c=1159 u=-1.0000000000 subseq=1
 [Sample-CP] g=1 c=355 u=-1.0000000000 subseq=2
@@ -65,7 +66,7 @@ load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-c
 [Sample-CP] g=14 c=901 u=-1.0000000000 subseq=15
 [Debug] codes-step0: [16] first4: 1995.000000 1159.000000 355.000000 22.000000
 [Debug] next-emb-step0: [2048] first4: -0.039671 -0.032533 -0.000920 0.180072
-[Debug] talker-hidden-step1: [2048] first4: 0.535159 -1.850773 3.023841 -1.191638
+[Debug] talker-hidden-step1: [2048] first4: 0.538726 -1.850426 3.015613 -1.177144
 [Sample] step=1 c0=259 u=-1.0000000000 subseq=16
 [Sample-CP] g=0 c=259 u=-1.0000000000 subseq=17
 [Sample-CP] g=1 c=1160 u=-1.0000000000 subseq=18
@@ -104,21 +105,21 @@ load_backend: loaded CPU backend from /mnt/workspace/qwentts.cpp/build/libggml-c
 [Python] Codes shape: (63, 16) (T_frames, num_code_groups)
 [Python] Audio: 120960 samples 24000 Hz 5.04s -> python/customvoice/customvoice-python.wav
 [Quant] BF16 -> ../models/qwen-talker-1.7b-customvoice-BF16.gguf + ../models/qwen-tokenizer-12hz-BF16.gguf
-[GGML] Cmd: ../build/qwen-tts --model ../models/qwen-talker-1.7b-customvoice-BF16.gguf --codec ../models/qwen-tokenizer-12hz-BF16.gguf --seed 42 --text qwentts.cpp is a minimal C++17 and GGML port of Qwen3-TTS for zero shot multilingual text to speech. --speaker vivian --lang english --max-new 64 --dump cpp/customvoice -o cpp/customvoice/customvoice-cpp.wav --greedy
+[GGML] Cmd: ../build/qwen-tts --model ../models/qwen-talker-1.7b-customvoice-BF16.gguf --codec ../models/qwen-tokenizer-12hz-BF16.gguf --seed 42 --speaker vivian --lang english --max-new 64 --dump cpp/customvoice -o cpp/customvoice/customvoice-cpp.wav --greedy
 [GGML] Audio: 122880 samples 24000 Hz 5.12s -> cpp/customvoice/customvoice-cpp.wav
 [Cossim] PromptIDs exact: 100.00% (38 values)
-[Cossim] Embed cos: 1.000000 max: 1.9073e-06 mean: 1.8764e-08
-[Cossim] TrailingText cos: 1.000000 max: 1.3709e-06 mean: 9.3658e-09
-[Cossim] TTSPadEmbed cos: 1.000000 max: 1.3709e-06 mean: 9.3658e-09
-[Cossim] L0 cos: 1.000000 max: 4.9011e-02 mean: 1.1031e-04
-[Cossim] L7 cos: 0.999997 max: 2.0044e+01 mean: 1.9537e-03
-[Cossim] L14 cos: 0.999997 max: 2.0063e+01 mean: 3.7767e-03
-[Cossim] L21 cos: 0.999997 max: 2.0063e+01 mean: 1.1207e-02
-[Cossim] L27 cos: 0.999995 max: 1.9309e+01 mean: 6.0608e-02
-[Cossim] Final cos: 0.999991 max: 4.9782e-01 mean: 4.1352e-03
-[Cossim] Logits cos: 0.999998 max: 4.0338e-02 mean: 6.8873e-03
-[Cossim] NextEmbStep0 cos: 1.000000 max: 1.3709e-06 mean: 9.5057e-09
-[Cossim] TalkerHiddenStep1 cos: 0.999994 max: 3.4467e-02 mean: 6.2675e-03
-[Cossim] CodesFull exact: 18.85% (1008 values)
-[Cossim] Audio cos: 0.175083
-[Cossim] WAV stft_cos: 0.437989 samples: 120960
+[Cossim] Embed cos: 1.000000 max: 1.5882e-04 mean: 1.3175e-05
+[Cossim] TrailingText cos: 1.000000 max: 1.3709e-06 mean: 9.3464e-09
+[Cossim] TTSPadEmbed cos: 1.000000 max: 1.3709e-06 mean: 9.3464e-09
+[Cossim] L0 cos: 1.000000 max: 4.0894e-02 mean: 1.1587e-04
+[Cossim] L7 cos: 0.999997 max: 2.0042e+01 mean: 1.9439e-03
+[Cossim] L14 cos: 0.999997 max: 2.0061e+01 mean: 3.7116e-03
+[Cossim] L21 cos: 0.999997 max: 2.0061e+01 mean: 1.1507e-02
+[Cossim] L27 cos: 0.999995 max: 1.9371e+01 mean: 6.3114e-02
+[Cossim] Final cos: 0.999989 max: 3.9251e-01 mean: 4.3734e-03
+[Cossim] Logits cos: 0.999998 max: 4.0061e-02 mean: 7.1246e-03
+[Cossim] NextEmbStep0 cos: 1.000000 max: 1.3709e-06 mean: 9.4380e-09
+[Cossim] TalkerHiddenStep1 cos: 0.999995 max: 3.6108e-02 mean: 5.3054e-03
+[Cossim] CodesFull exact: 24.31% (1008 values)
+[Cossim] Audio cos: 0.182313
+[Cossim] WAV stft_cos: 0.537801 samples: 120960
