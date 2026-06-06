@@ -397,4 +397,19 @@ int qt_duration_sec_to_tokens(const struct qt_context * q, float duration_sec) {
     return pipeline_tts_duration_sec_to_tokens(&q->pt, duration_sec);
 }
 
+int qt_n_speakers(const struct qt_context * q) {
+    if (!q) {
+        qt_set_error("qt_n_speakers: q is NULL");
+        return 0;
+    }
+    return (int) q->pt.speakers.size();
+}
+
+const char * qt_speaker_name(const struct qt_context * q, int i) {
+    if (!q || i < 0 || i >= (int) q->pt.speakers.size()) {
+        return NULL;
+    }
+    return q->pt.speakers[(size_t) i].name.c_str();
+}
+
 }  // extern "C"

@@ -55,7 +55,7 @@ static void print_usage(const char * prog) {
             "  --sub-top-p <f>         Sub-talker top-p (default: 1.0)\n\n"
             "Debug:\n"
             "  --no-fa                 Disable flash attention\n"
-            "  --clamp-fp16            Clamp hidden states + V to FP16 range\n"
+            "  --clamp-fp16            Clamp hidden states to FP16 range\n"
             "  --dump <dir>            Dump intermediate tensors (f32) to <dir>\n",
             prog);
 }

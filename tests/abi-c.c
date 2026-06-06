@@ -159,6 +159,17 @@ int main(void) {
         return 4;
     }
 
+    /* Speaker getters resolve and behave on a NULL handle : count is 0 and
+     * any index returns NULL. No model is needed to lock in the contract. */
+    if (qt_n_speakers(NULL) != 0) {
+        fprintf(stderr, "[Probe] qt_n_speakers(NULL) must be 0\n");
+        return 9;
+    }
+    if (qt_speaker_name(NULL, 0) != NULL) {
+        fprintf(stderr, "[Probe] qt_speaker_name(NULL, 0) must be NULL\n");
+        return 10;
+    }
+
     /* Restore the default stderr fallback before exit so the trailing
      * [Qwen] log lines from the cleanup paths land where the user
      * expects them. */

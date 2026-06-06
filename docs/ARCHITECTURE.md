@@ -521,7 +521,7 @@ Sampling:
 
 Debug:
   --no-fa                 Disable flash attention
-  --clamp-fp16            Clamp hidden states + V to FP16 range
+  --clamp-fp16            Clamp hidden states to FP16 range
   --dump <dir>            Dump intermediate tensors (f32) to <dir>
 ```
 

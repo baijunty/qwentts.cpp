@@ -291,6 +291,14 @@ QT_API enum qt_status qt_synthesize(struct qt_context * q, const struct qt_tts_p
 // Clamps to a minimum of one frame.
 QT_API int qt_duration_sec_to_tokens(const struct qt_context * q, float duration_sec);
 
+// Number of named speakers in the loaded model. custom_voice carries a
+// speaker table ; base and voice_design return 0.
+QT_API int qt_n_speakers(const struct qt_context * q);
+
+// Name of speaker i, valid for i in [0, qt_n_speakers). Returns NULL when
+// i is out of range. The pointer stays valid until qt_free. UTF-8.
+QT_API const char * qt_speaker_name(const struct qt_context * q, int i);
+
 #ifdef __cplusplus
 }
 #endif

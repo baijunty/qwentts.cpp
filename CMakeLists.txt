@@ -60,6 +60,19 @@ endif()
 # ggml as subdirectory, inherits GGML_CUDA, GGML_METAL, etc. from cmake flags
 add_subdirectory(ggml)
 
+# cpp-httplib (HTTP server library, no SSL, behind reverse proxy in prod).
+# Used by tts-server.
+add_subdirectory(vendor/cpp-httplib)
+
+# yyjson (MIT, fast JSON parser/writer). Used by tts-server.
+add_library(yyjson STATIC vendor/yyjson/yyjson.c)
+target_include_directories(yyjson PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/vendor/yyjson)
+if(MSVC)
+    target_compile_options(yyjson PRIVATE /W0)
+else()
+    target_compile_options(yyjson PRIVATE -w)
+endif()
+
 # Shared compile options and ggml linkage
 macro(link_ggml_backends target)
     target_include_directories(${target} PRIVATE
@@ -153,6 +166,12 @@ link_ggml_backends(qwen-codec)
 add_executable(qwen-tts tools/qwen-tts.cpp)
 target_link_libraries(qwen-tts PRIVATE qwen-core)
 link_ggml_backends(qwen-tts)
+
+# tts-server : OpenAI-compatible HTTP server over the TTS pipeline.
+# Always built : it is part of the project, not an optional add-on.
+add_executable(tts-server tools/tts-server.cpp)
+target_link_libraries(tts-server PRIVATE qwen-core httplib yyjson)
+link_ggml_backends(tts-server)
 
 # test-abi-c : pure C99 smoke test that locks in the public ABI contract.
 # Compiles qwen.h with a C compiler under -Wall -Werror -pedantic and
