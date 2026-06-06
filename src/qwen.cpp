@@ -313,6 +313,14 @@ enum qt_status qt_synthesize(struct qt_context * q, const struct qt_tts_params *
         return QT_STATUS_INVALID_PARAMS;
     }
 
+    if (!params->text || !params->text[0]) {
+        qt_set_error("qt_synthesize: params->text is NULL or empty");
+        if (out) {
+            qt_audio_free(out);
+        }
+        return QT_STATUS_INVALID_PARAMS;
+    }
+
     // Mode validation. Mirrors the upstream Python which raises
     // ValueError when generate_voice_design is called on a non
     // voice_design model and the same shape applies to

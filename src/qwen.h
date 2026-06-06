@@ -197,8 +197,10 @@ QT_API void qt_log_set(qt_log_cb cb, void * user_data);
 struct qt_tts_params {
     int abi_version;
 
-    // Input text and language hint. lang accepts the upstream
-    // qwen3-tts language names ("english", "chinese", "auto", ...).
+    // Input text and language hint. text is required and non empty.
+    // lang accepts the upstream qwen3-tts language names ("english",
+    // "chinese", "auto", ...). NULL selects "auto": the prompt carries
+    // no language id and the model infers it from the text.
     // instruct is the style instruction string; required for
     // voice_design, optional for custom_voice, rejected for base.
     // speaker is the named speaker for custom_voice models, rejected

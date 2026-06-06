@@ -439,8 +439,12 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
     TtsPerf perf = {};
     Timer   t_total;
 
+    // NULL lang selects automatic language: the prompt carries no
+    // language id and the model infers it from the text.
+    const char * lang = params->lang ? params->lang : "auto";
+
     Timer t_build;
-    if (!prompt_builder_build(pt, tok, params->text, params->lang, instruct, speaker, ref_spk_emb_ptr, ref_text,
+    if (!prompt_builder_build(pt, tok, params->text, lang, instruct, speaker, ref_spk_emb_ptr, ref_text,
                               ref_codes_T > 0 ? ref_codes.data() : NULL, ref_codes_T, &prompt)) {
         return QT_STATUS_GENERATE_FAILED;
     }

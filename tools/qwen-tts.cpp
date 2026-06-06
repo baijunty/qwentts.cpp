@@ -34,7 +34,7 @@ static void print_usage(const char * prog) {
             "  stdin                   Target text to synthesise. Read fully then synthesised in one shot.\n\n"
             "Optional:\n"
             "  --format <fmt>          WAV output format: wav16, wav24, wav32 (default: wav16)\n"
-            "  --lang <name>           Language label (default: english)\n"
+            "  --lang <name>           Language label (default: auto)\n"
             "  --instruct <str>        Style instruction. Required for VoiceDesign, optional for\n"
             "                          CustomVoice, rejected for Base\n"
             "  --speaker <name>        Speaker name (CustomVoice only)\n"
@@ -130,7 +130,7 @@ static bool read_text_file(const char * path, std::string & out) {
 
 static bool parse_args(int argc, char ** argv, Args & a) {
     a                        = {};
-    a.lang                   = "english";
+    a.lang                   = "auto";
     a.format                 = "wav16";
     a.max_new_tokens         = 2048;
     a.seed                   = -1;

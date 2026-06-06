@@ -498,7 +498,7 @@ Input:
 
 Optional:
   --format <fmt>          WAV output format: wav16, wav24, wav32 (default: wav16)
-  --lang <name>           Language label (default: english)
+  --lang <name>           Language label (default: auto)
   --instruct <str>        Style instruction. Required for VoiceDesign, optional for
                           CustomVoice, rejected for Base
   --speaker <name>        Speaker name (CustomVoice only)

@@ -21,7 +21,7 @@ static void print_usage(const char * prog) {
             "Optional:\n"
             "  --host <ip>             Listen address (default: 127.0.0.1)\n"
             "  --port <n>              Listen port (default: 8080)\n"
-            "  --lang <name>           Language label (default: english)\n"
+            "  --lang <name>           Language label (default: auto)\n"
             "  --no-fa                 Disable flash attention\n"
             "  --clamp-fp16            Clamp hidden states to FP16 range\n",
             prog);
@@ -37,7 +37,7 @@ static std::string basename_of(const char * path) {
 int main(int argc, char ** argv) {
     const char *  talker_path = NULL;
     const char *  codec_path  = NULL;
-    std::string   lang        = "english";
+    std::string   lang        = "auto";
     server_config cfg;
     bool          use_fa     = true;
     bool          clamp_fp16 = false;
