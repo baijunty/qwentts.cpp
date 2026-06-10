@@ -1,0 +1,806 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>VoxCPM 语音平台</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+            body {
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                    Oxygen, Ubuntu, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                min-height: 100vh;
+                padding: 20px;
+            }
+            .container {
+                max-width: 1000px;
+                margin: 0 auto;
+            }
+            .header {
+                text-align: center;
+                color: white;
+                margin-bottom: 30px;
+            }
+            .header h1 {
+                font-size: 2.5em;
+                margin-bottom: 10px;
+            }
+            .header p {
+                font-size: 1.1em;
+                opacity: 0.9;
+            }
+            .nav-link {
+                display: inline-block;
+                margin-top: 15px;
+                padding: 10px 25px;
+                background: rgba(255, 255, 255, 0.2);
+                border: 2px solid white;
+                border-radius: 25px;
+                color: white;
+                text-decoration: none;
+                transition: all 0.3s ease;
+            }
+            .nav-link:hover {
+                background: white;
+                color: #667eea;
+            }
+            .tabs {
+                display: flex;
+                gap: 10px;
+                margin-bottom: 20px;
+            }
+            .tab {
+                flex: 1;
+                padding: 15px 25px;
+                background: rgba(255, 255, 255, 0.2);
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-radius: 10px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                color: white;
+                font-size: 1.1em;
+                font-weight: 500;
+                text-align: center;
+            }
+            .tab:hover {
+                background: rgba(255, 255, 255, 0.3);
+            }
+            .tab.active {
+                background: white;
+                color: #667eea;
+                border-color: white;
+            }
+            .tab-content {
+                display: none;
+            }
+            .tab-content.active {
+                display: block;
+            }
+            .card {
+                background: white;
+                border-radius: 16px;
+                padding: 30px;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+                margin-bottom: 20px;
+            }
+            .card h2 {
+                color: #667eea;
+                margin-bottom: 20px;
+                font-size: 1.6em;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+            .form-group {
+                margin-bottom: 20px;
+            }
+            .form-group label {
+                display: block;
+                margin-bottom: 8px;
+                color: #555;
+                font-weight: 500;
+            }
+            .form-group input[type="text"],
+            .form-group input[type="file"],
+            .form-group textarea,
+            .form-group select {
+                width: 100%;
+                padding: 12px 15px;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                font-size: 1em;
+                transition: all 0.3s ease;
+            }
+            .form-group input:focus,
+            .form-group textarea:focus,
+            .form-group select:focus {
+                outline: none;
+                border-color: #667eea;
+            }
+            .form-group textarea {
+                min-height: 120px;
+                resize: vertical;
+            }
+            .btn {
+                padding: 14px 30px;
+                border: none;
+                border-radius: 8px;
+                font-size: 1em;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+            }
+            .btn-primary {
+                background: linear-gradient(45deg, #667eea, #764ba2);
+                color: white;
+            }
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            }
+            .btn-primary:disabled {
+                opacity: 0.6;
+                cursor: not-allowed;
+                transform: none;
+            }
+            .btn-loading {
+                position: relative;
+                pointer-events: none;
+            }
+            .btn-loading::after {
+                content: "";
+                position: absolute;
+                width: 20px;
+                height: 20px;
+                border: 2px solid rgba(255, 255, 255, 0.3);
+                border-top-color: white;
+                border-radius: 50%;
+                animation: spin 0.8s linear infinite;
+                margin-left: 8px;
+            }
+            @keyframes spin {
+                to {
+                    transform: rotate(360deg);
+                }
+            }
+            .file-upload-area {
+                border: 2px dashed #667eea;
+                border-radius: 10px;
+                padding: 40px;
+                text-align: center;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                background: rgba(102, 126, 234, 0.05);
+            }
+            .file-upload-area:hover {
+                border-color: #764ba2;
+                background: rgba(102, 126, 234, 0.1);
+            }
+            .file-upload-area.dragover {
+                border-color: #4ade80;
+                background: rgba(74, 222, 128, 0.1);
+            }
+            .file-upload-icon {
+                font-size: 3em;
+                margin-bottom: 15px;
+            }
+            .file-upload-text {
+                color: #888;
+                font-size: 1.1em;
+            }
+            .file-info {
+                margin-top: 15px;
+                padding: 10px;
+                background: rgba(74, 222, 128, 0.1);
+                border-radius: 5px;
+                color: #4ade80;
+                display: none;
+            }
+            .voice-list {
+                max-height: 300px;
+                overflow-y: auto;
+                border: 2px solid #ddd;
+                border-radius: 8px;
+                background: #f9f9f9;
+            }
+            .voice-item {
+                padding: 12px 15px;
+                border-bottom: 1px solid #eee;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+            }
+            .voice-item:hover {
+                background: rgba(102, 126, 234, 0.1);
+            }
+            .voice-item.selected {
+                background: rgba(102, 126, 234, 0.2);
+                border-left: 3px solid #667eea;
+            }
+            .voice-id {
+                font-weight: bold;
+                color: #667eea;
+            }
+            .voice-name {
+                color: #888;
+            }
+            .result-area {
+                margin-top: 20px;
+                padding: 20px;
+                background: rgba(74, 222, 128, 0.1);
+                border-radius: 8px;
+                border: 2px solid rgba(74, 222, 128, 0.3);
+                display: none;
+            }
+            .result-area.success {
+                display: block;
+            }
+            .result-area.error {
+                background: rgba(239, 68, 68, 0.1);
+                border-color: rgba(239, 68, 68, 0.3);
+                color: #ef4444;
+            }
+            .audio-player {
+                width: 100%;
+                margin-top: 15px;
+            }
+            .footer {
+                text-align: center;
+                color: white;
+                margin-top: 30px;
+                opacity: 0.8;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>🎙️ VoxCPM 语音平台</h1>
+                <p>注册音频元数据或克隆生成语音</p>
+                <div class="nav-link" onclick="showHelp()">📖 查看帮助</div>
+            </div>
+
+            <div class="tabs">
+                <div class="tab active" data-tab="register">📝 注册语音</div>
+                <div class="tab" data-tab="clone">🎭 克隆语音</div>
+                <div class="tab" data-tab="help">📖 帮助</div>
+            </div>
+
+            <!-- 注册语音标签页 -->
+            <div class="tab-content active" id="register-tab">
+                <div class="card">
+                    <h2>📤 上传语音文件注册</h2>
+                    <div class="form-group">
+                        <div class="file-upload-area" id="dropZone">
+                            <div class="file-upload-icon">🎵</div>
+                            <div class="file-upload-text">
+                                拖拽音频文件到此处，或点击选择文件
+                            </div>
+                            <div class="file-info" id="fileInfo"></div>
+                        </div>
+                        <input
+                            type="file"
+                            id="audioFile"
+                            accept="audio/*"
+                            style="display: none"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="voiceId">语音 ID</label>
+                        <input
+                            type="text"
+                            id="voiceId"
+                            placeholder="请输入语音 ID（例如：my_voice）"
+                        />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="voiceText">语音对应文本</label>
+                        <textarea
+                            id="voiceText"
+                            placeholder="请输入这段音频对应的文本内容..."
+                        ></textarea>
+                    </div>
+
+                    <button class="btn btn-primary" id="registerBtn">
+                        <span>📝</span> 注册音频元数据
+                    </button>
+
+                    <div class="result-area" id="registerResult"></div>
+                </div>
+            </div>
+
+            <!-- 克隆语音标签页 -->
+            <div class="tab-content" id="clone-tab">
+                <div class="card">
+                    <h2>🎤 文字转语音克隆</h2>
+
+                    <div class="form-group">
+                        <label for="voiceSelect">选择已注册的语音</label>
+                        <div class="voice-list" id="voiceList">
+                            <div class="voice-item" style="color: #999">
+                                暂无注册语音
+                            </div>
+                        </div>
+                        <input type="hidden" id="selectedVoiceId" value="" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="textContent">输入要转换的文字</label>
+                        <textarea
+                            id="textContent"
+                            placeholder="请输入您想要转换为语音的文字内容..."
+                        ></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="speed">语速</label>
+                        <select id="speed">
+                            <option value="0.5">慢速 (0.5x)</option>
+                            <option value="0.8">较慢 (0.8x)</option>
+                            <option value="1.0" selected>正常 (1.0x)</option>
+                            <option value="1.2">较快 (1.2x)</option>
+                            <option value="1.5">快速 (1.5x)</option>
+                            <option value="2.0">极快 (2.0x)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="format">输出格式</label>
+                        <select id="format">
+                            <option value="mp3" selected>MP3 (推荐)</option>
+                            <option value="wav">WAV</option>
+                            <option value="pcm">PCM (raw)</option>
+                        </select>
+                        <small style="color: #999; display: block; margin-top: 4px">
+                            注：MP3 格式需要 ffmpeg 安装
+                        </small>
+                    </div>
+
+                    <button
+                        class="btn btn-primary"
+                        id="cloneBtn"
+                        disabled
+                        style="opacity: 0.5; cursor: not-allowed"
+                    >
+                        <span>🎭</span> 生成语音
+                    </button>
+
+                    <div class="result-area" id="cloneResult"></div>
+                    <audio
+                        class="audio-player"
+                        id="audioPlayer"
+                        controls
+                        style="display: none"
+                    ></audio>
+                </div>
+            </div>
+
+            <!-- 帮助标签页 -->
+            <div class="tab-content" id="help-tab">
+                <div class="card">
+                    <h2>📖 使用说明</h2>
+
+                    <h3 style="color: #764ba2; margin: 20px 0 10px">
+                        📝 注册语音
+                    </h3>
+                    <p>1. 上传音频文件（支持 MP3、WAV、FLAC 等格式）</p>
+                    <p>2. 输入语音 ID（用于标识该语音）</p>
+                    <p>3. 输入该音频对应的文本内容</p>
+                    <p>4. 点击"注册音频元数据"按钮</p>
+
+                    <h3 style="color: #764ba2; margin: 20px 0 10px">
+                        🎭 克隆语音
+                    </h3>
+                    <p>1. 选择已注册的语音 ID</p>
+                    <p>2. 输入要转换的文字内容</p>
+                    <p>3. 调整语速和输出格式（可选，默认 MP3）</p>
+                    <p>4. 点击"生成语音"按钮</p>
+
+                    <h3 style="color: #764ba2; margin: 20px 0 10px">
+                        🔧 API 端点
+                    </h3>
+                    <p>
+                        <strong>语音合成：</strong
+                        ><code>POST /v1/audio/speech</code>
+                    </p>
+                    <p>
+                        <strong>注册语音：</strong><code>POST /v1/audio/voices</code>
+                    </p>
+                    <p>
+                        <strong>获取语音列表：</strong
+                        ><code>GET /v1/audio/voices</code>
+                    </p>
+                    <p>
+                        <strong>传统生成端点：</strong
+                        ><code>POST /generate</code>
+                    </p>
+
+                    <h3 style="color: #764ba2; margin: 20px 0 10px">
+                        📋 示例请求
+                    </h3>
+                    <div
+                        style="
+                            background: #2d2d2d;
+                            color: #f8f8f2;
+                            padding: 15px;
+                            border-radius: 8px;
+                            overflow-x: auto;
+                            font-family: monospace;
+                            font-size: 0.9em;
+                        "
+                    >
+# 获取所有已注册语音列表
+curl http://localhost:8080/v1/audio/voices
+
+# 注册语音
+# 注意：s2.cpp 需要 file (音频)、reference_text (对应文本)、voice_id
+
+curl -X POST http://localhost:8080/v1/audio/voices \
+  -F "voice_id=my_voice" \
+  -F "reference_text=这段音频对应的文本" \
+  -F "file=@prompt.wav"
+
+# 生成语音 (OpenAI 兼容格式，支持 mp3/wav/pcm)
+# 默认格式为 mp3
+curl -X POST http://localhost:8080/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{ "input": "你好，这是测试", "voice": "my_voice", "response_format": "mp3" }' \
+  --output output.mp3
+
+# 传统生成端点 (支持更多参数)
+curl -X POST http://localhost:8080/generate \
+  -F "text=要合成的文字" \
+  -F "voice=my_voice" \
+  -F "reference_text=参考音频文本" \
+  -F "reference_audio=@ref.wav" \
+  -F 'params={"stream": true, "low_latency": true}' \
+  --output output.wav
+                    </div>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>🎙️ qwentts.cpp 语音合成服务器 - 基于 Fish Audio S2 Pro</p>
+            </div>
+        </div>
+
+        <script>
+            // 标签页切换
+            document.querySelectorAll(".tab").forEach((tab) => {
+                tab.addEventListener("click", function () {
+                    const tabId = this.dataset.tab;
+
+                    // 切换标签样式
+                    document
+                        .querySelectorAll(".tab")
+                        .forEach((t) => t.classList.remove("active"));
+                    this.classList.add("active");
+
+                    // 切换内容显示
+                    document
+                        .querySelectorAll(".tab-content")
+                        .forEach((content) => {
+                            content.classList.remove("active");
+                        });
+                    document
+                        .getElementById(`${tabId}-tab`)
+                        .classList.add("active");
+                });
+            });
+
+            // 检查 URL 参数
+            const urlParams = new URLSearchParams(window.location.search);
+            const tabParam = urlParams.get("tab");
+            if (tabParam && document.getElementById(`${tabParam}-tab`)) {
+                document
+                    .querySelectorAll(".tab")
+                    .forEach((t) => t.classList.remove("active"));
+                document
+                    .querySelector(`[data-tab="${tabParam}"]`)
+                    ?.classList.add("active");
+                document.querySelectorAll(".tab-content").forEach((content) => {
+                    content.classList.remove("active");
+                });
+                document
+                    .getElementById(`${tabParam}-tab`)
+                    .classList.add("active");
+            }
+
+            // 文件上传区域
+            const dropZone = document.getElementById("dropZone");
+            const audioFileInput = document.getElementById("audioFile");
+            const fileInfo = document.getElementById("fileInfo");
+
+            dropZone.addEventListener("click", () => audioFileInput.click());
+
+            dropZone.addEventListener("dragover", (e) => {
+                e.preventDefault();
+                dropZone.classList.add("dragover");
+            });
+
+            dropZone.addEventListener("dragleave", () => {
+                dropZone.classList.remove("dragover");
+            });
+
+            dropZone.addEventListener("drop", (e) => {
+                e.preventDefault();
+                dropZone.classList.remove("dragover");
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    audioFileInput.files = files;
+                    showFileInfo(files[0]);
+                }
+            });
+
+            audioFileInput.addEventListener("change", (e) => {
+                if (e.target.files.length > 0) {
+                    showFileInfo(e.target.files[0]);
+                }
+            });
+
+            function showFileInfo(file) {
+                fileInfo.style.display = "block";
+                fileInfo.innerHTML = `✅ 已选择：${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+            }
+
+            // 注册语音
+            document
+                .getElementById("registerBtn")
+                .addEventListener("click", async () => {
+                    const file = audioFileInput.files[0];
+                    const voiceId = document
+                        .getElementById("voiceId")
+                        .value.trim();
+                    const voiceText = document
+                        .getElementById("voiceText")
+                        .value.trim();
+                    const resultDiv = document.getElementById("registerResult");
+
+                    if (!file) {
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = "❌ 请先选择音频文件";
+                        return;
+                    }
+
+                    if (!voiceId) {
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = "❌ 请输入语音 ID";
+                        return;
+                    }
+
+                    if (!voiceText) {
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = "❌ 请输入语音对应文本";
+                        return;
+                    }
+
+                    resultDiv.className = "result-area";
+                    resultDiv.innerHTML = "⏳ 正在注册...";
+
+                    const registerBtn = document.getElementById("registerBtn");
+                    registerBtn.disabled = true;
+                    registerBtn.classList.add("btn-loading");
+
+                    try {
+                        const formData = new FormData();
+                        // tts-server.h expects: id, text, audio
+                        formData.append("id", voiceId);
+                        formData.append("text", voiceText);
+                        formData.append("audio", file);
+
+                        const response = await fetch("/v1/voices", {
+                            method: "POST",
+                            body: formData,
+                        });
+
+                        if (response.ok) {
+                            resultDiv.className = "result-area success";
+                            resultDiv.innerHTML = `✅ 注册成功！语音 ID: ${voiceId}`;
+                            audioFileInput.value = "";
+                            document.getElementById("voiceId").value = "";
+                            document.getElementById("voiceText").value = "";
+                            fileInfo.style.display = "none";
+                            // 刷新语音列表
+                            refreshVoiceList();
+                        } else {
+                            const error = await response.json();
+                            throw new Error(error.error?.message || "注册失败");
+                        }
+                    } catch (error) {
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = `❌ 注册失败：${error.message}`;
+                    } finally {
+                        registerBtn.disabled = false;
+                        registerBtn.classList.remove("btn-loading");
+                    }
+                });
+
+            // 选择语音
+            document
+                .getElementById("voiceList")
+                .addEventListener("click", function (e) {
+                    const voiceItem = e.target.closest(".voice-item");
+                    if (voiceItem && voiceItem.dataset.id) {
+                        document
+                            .querySelectorAll(".voice-item")
+                            .forEach((item) => {
+                                item.classList.remove("selected");
+                            });
+                        voiceItem.classList.add("selected");
+                        document.getElementById("selectedVoiceId").value =
+                            voiceItem.dataset.id;
+                        // 启用生成按钮
+                        document.getElementById("cloneBtn").disabled = false;
+                        document.getElementById("cloneBtn").style.opacity = "1";
+                        document.getElementById("cloneBtn").style.cursor =
+                            "pointer";
+                    }
+                });
+
+            // 刷新语音列表
+            async function refreshVoiceList() {
+                try {
+                    const response = await fetch("/v1/voices");
+                    if (response.ok) {
+                        const data = await response.json();
+                        const voices = data.voices || [];
+                        const voiceList = document.getElementById("voiceList");
+                        voiceList.innerHTML = "";
+
+                        if (voices.length === 0) {
+                            voiceList.innerHTML =
+                                '<div class="voice-item" style="color: #999;">暂无注册语音</div>';
+                            document.getElementById("cloneBtn").disabled = true;
+                            document.getElementById("cloneBtn").style.opacity =
+                                "0.5";
+                            document.getElementById("cloneBtn").style.cursor =
+                                "not-allowed";
+                        } else {
+                            voices.forEach((voice) => {
+                                const item = document.createElement("div");
+                                item.className = "voice-item";
+                                item.dataset.id = voice.id;
+                                item.innerHTML = `${voice.id} - ${voice.name || voice.id}`;
+                                voiceList.appendChild(item);
+                            });
+                            // 自动选择第一个语音
+                            const firstItem = voiceList.querySelector(
+                                ".voice-item[data-id]",
+                            );
+                            if (firstItem) {
+                                firstItem.click();
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error("Failed to refresh voice list:", error);
+                }
+            }
+
+            // 克隆语音
+            document
+                .getElementById("cloneBtn")
+                .addEventListener("click", async () => {
+                    const voiceId =
+                        document.getElementById("selectedVoiceId").value;
+
+                    if (!voiceId) {
+                        const resultDiv =
+                            document.getElementById("cloneResult");
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = "❌ 请先选择语音";
+                        return;
+                    }
+
+                    const text = document
+                        .getElementById("textContent")
+                        .value.trim();
+                    const speed = document.getElementById("speed").value;
+                    const format = document.getElementById("format").value;
+                    const resultDiv = document.getElementById("cloneResult");
+                    const audioPlayer = document.getElementById("audioPlayer");
+
+                    if (!text) {
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = "❌ 请输入要转换的文字";
+                        return;
+                    }
+
+                    resultDiv.className = "result-area";
+                    resultDiv.innerHTML = "⏳ 正在生成语音...";
+                    audioPlayer.style.display = "none";
+
+                    const cloneBtn = document.getElementById("cloneBtn");
+                    cloneBtn.disabled = true;
+                    cloneBtn.classList.add("btn-loading");
+
+                    try {
+                        // tts-server.h /v1/audio/speech accepts: input, voice, format (wav/pcm), speed
+                        const response = await fetch("/v1/audio/speech", {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json",
+                            },
+                            body: JSON.stringify({
+                                input: text,
+                                voice: voiceId,
+                                format: format, // server supports wav/pcm
+                                speed: parseFloat(speed) || 1.0,
+                            }),
+                        });
+
+                        if (response.ok) {
+                            // 根据格式设置正确的 MIME 类型
+                            let contentType;
+                            if (format === "wav") {
+                                contentType = "audio/wav";
+                            } else if (format === "mp3") {
+                                contentType = "audio/mpeg";
+                            } else {
+                                contentType = "audio/pcm";
+                            }
+                            const blob = new Blob([await response.blob()], { type: contentType });
+                            const audioUrl = URL.createObjectURL(blob);
+
+                            resultDiv.className = "result-area success";
+                            if (format === "pcm") {
+                                resultDiv.innerHTML = `⚠️ 语音已生成，但 PCM 格式浏览器无法直接播放。请改用 WAV 或 MP3 格式。`;
+                            } else {
+                                resultDiv.innerHTML = `✅ 语音生成成功！ (${format.toUpperCase()})`;
+                            }
+
+                            audioPlayer.src = audioUrl;
+                            audioPlayer.style.display = "block";
+                            audioPlayer.play().catch(e => {
+                                console.error("Audio playback failed:", e);
+                                if (format === "pcm") {
+                                    resultDiv.innerHTML = `❌ PCM 格式无法播放，请切换为 WAV 或 MP3 格式`;
+                                }
+                            });
+                        } else {
+                            const error = await response.json();
+                            throw new Error(error.error?.message || "生成失败");
+                        }
+                    } catch (error) {
+                        resultDiv.className = "result-area error";
+                        resultDiv.innerHTML = `❌ 生成失败：${error.message}`;
+                    } finally {
+                        cloneBtn.disabled = false;
+                        cloneBtn.classList.remove("btn-loading");
+                    }
+                });
+
+            // 页面加载时刷新语音列表
+            refreshVoiceList();
+
+            // 显示帮助页
+            function showHelp() {
+                document
+                    .querySelectorAll(".tab")
+                    .forEach((t) => t.classList.remove("active"));
+                document
+                    .querySelector('[data-tab="help"]')
+                    ?.classList.add("active");
+                document.querySelectorAll(".tab-content").forEach((content) => {
+                    content.classList.remove("active");
+                });
+                document.getElementById("help-tab").classList.add("active");
+            }
+        </script>
+    </body>
+</html>

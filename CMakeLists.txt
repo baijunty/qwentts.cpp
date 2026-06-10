@@ -73,6 +73,15 @@ else()
     target_compile_options(yyjson PRIVATE -w)
 endif()
 
+# Find FFmpeg for MP3 encoding
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(FFMPEG QUIET libavcodec libavformat libavutil)
+endif()
+if(NOT FFMPEG_FOUND)
+    find_package(FFMPEG QUIET)
+endif()
+
 # Shared compile options and ggml linkage
 macro(link_ggml_backends target)
     target_include_directories(${target} PRIVATE
@@ -171,6 +180,12 @@ link_ggml_backends(qwen-tts)
 # Always built : it is part of the project, not an optional add-on.
 add_executable(tts-server tools/tts-server.cpp)
 target_link_libraries(tts-server PRIVATE qwen-core httplib yyjson)
+if(FFMPEG_FOUND)
+    target_include_directories(tts-server PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(tts-server PRIVATE ${FFMPEG_LIBRARIES})
+    target_link_directories(tts-server PRIVATE ${FFMPEG_LIBRARY_DIRS})
+    target_compile_definitions(tts-server PRIVATE HAVE_FFMPEG)
+endif()
 link_ggml_backends(tts-server)
 
 # test-abi-c : pure C99 smoke test that locks in the public ABI contract.

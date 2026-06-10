@@ -9,12 +9,14 @@
 //
 // Endpoints:
 //   POST /v1/audio/speech   OAI text-to-speech
+//   POST /v1/voices         upload voice reference (audio + text + id)
 //   GET  /v1/models         single loaded model
-//   GET  /v1/voices         named speakers (empty when the model has none)
+//   GET  /v1/voices         list saved voices
 //   GET  /health            liveness probe
 //
 // Audio out: response_format "pcm" streams s16le 24 kHz mono chunked as it
-// is generated (real time), "wav" returns a one-shot RIFF file. pcm is the
+// is generated (real time), "wav" returns a one-shot RIFF file, "mp3" returns
+// a one-shot MP3 file (encoded via ffmpeg). pcm is the
 // default so streaming is on unless the client asks for a file.
 
 #include "../vendor/cpp-httplib/httplib.h"
@@ -25,18 +27,133 @@
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
+#include <fstream>
+#include <filesystem>
+
+#if defined(_WIN32)
+#include <fcntl.h>
+#include <io.h>
+#endif
+
+namespace fs = std::filesystem;
+
+static std::string audio_encode_mp3(const float * audio, int T_audio, int sr) {
+    std::string wav_data = audio_encode_wav(audio, T_audio, sr, WAV_S16);
+    if (wav_data.empty()) {
+        fprintf(stderr, "[MP3] Failed to encode WAV buffer\n");
+        return {};
+    }
+
+    char temp_wav[] = "/tmp/tts_input_XXXXXX.wav";
+    char temp_mp3[] = "/tmp/tts_output_XXXXXX.mp3";
+    
+    fprintf(stderr, "[MP3] Creating temp WAV file...\n");
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    char wav_path_buf[256];
+    char mp3_path_buf[256];
+    snprintf(wav_path_buf, sizeof(wav_path_buf), "/tmp/tts_%ld_%ld.wav", ts.tv_sec, ts.tv_nsec);
+    snprintf(mp3_path_buf, sizeof(mp3_path_buf), "/tmp/tts_%ld_%ld.mp3", ts.tv_sec, ts.tv_nsec);
+    std::string wav_path = wav_path_buf;
+    std::string mp3_path = mp3_path_buf;
+    
+    int fd_wav = open(wav_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (fd_wav < 0) {
+        fprintf(stderr, "[MP3] Failed to create WAV temp file: %s\n", strerror(errno));
+        return {};
+    }
+    fprintf(stderr, "[MP3] WAV temp file: %s (fd=%d)\n", wav_path.c_str(), fd_wav);
+    
+    fprintf(stderr, "[MP3] Creating temp MP3 file...\n");
+    int fd_mp3 = open(mp3_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (fd_mp3 < 0) {
+        fprintf(stderr, "[MP3] Failed to create MP3 temp file: %s\n", strerror(errno));
+        close(fd_wav);
+        unlink(wav_path.c_str());
+        return {};
+    }
+    fprintf(stderr, "[MP3] MP3 temp file: %s (fd=%d)\n", mp3_path.c_str(), fd_mp3);
+    
+    if (write(fd_wav, wav_data.data(), wav_data.size()) != (ssize_t)wav_data.size()) {
+        close(fd_wav); close(fd_mp3);
+        unlink(temp_wav); unlink(temp_mp3);
+        fprintf(stderr, "[MP3] Failed to write temp WAV\n");
+        return {};
+    }
+    close(fd_wav);
+    close(fd_mp3);
+    
+    std::string cmd = "ffmpeg -y -loglevel error -i ";
+    cmd += wav_path;
+    cmd += " -ar 24000 -ac 1 -b:a 128k -vn ";
+    cmd += mp3_path;
+    
+    int ret = system(cmd.c_str());
+    if (ret != 0) {
+        unlink(wav_path.c_str());
+        unlink(mp3_path.c_str());
+        fprintf(stderr, "[MP3] ffmpeg failed with code %d\n", ret);
+        fprintf(stderr, "[MP3] Command: %s\n", cmd.c_str());
+        fprintf(stderr, "[MP3] Input file size: %zu bytes\n", wav_data.size());
+        return {};
+    }
+    
+    FILE *fp = fopen(mp3_path.c_str(), "rb");
+    if (!fp) {
+        unlink(wav_path.c_str());
+        unlink(mp3_path.c_str());
+        fprintf(stderr, "[MP3] Failed to read MP3 output\n");
+        return {};
+    }
+    
+    fseek(fp, 0, SEEK_END);
+    long mp3_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    std::string mp3_data;
+    mp3_data.resize(mp3_size);
+    size_t read_size = fread(&mp3_data[0], 1, mp3_size, fp);
+    fclose(fp);
+    
+    unlink(wav_path.c_str());
+    unlink(mp3_path.c_str());
+    
+    if (read_size != (size_t)mp3_size) {
+        fprintf(stderr, "[MP3] Failed to read MP3 data\n");
+        return {};
+    }
+    
+    return mp3_data;
+}
+
+// Stored voice reference: audio samples and reference text.
+struct tts_voice {
+    std::string            id;        // voice identifier
+    std::vector<float>     audio;     // mono f32 24 kHz reference audio
+    std::string            text;      // reference text
+    std::string            filepath;  // path to saved WAV file (optional)
+};
 
 // One synthesis request parsed from the OAI JSON body.
 struct tts_request {
     std::string input;         // text to speak
-    std::string voice;         // OAI voice, mapped to a speaker by the adapter
+    std::string voice;         // OAI voice, mapped to a speaker by the adapter or voice id
     std::string instructions;  // OAI instructions, mapped to the ABI instruct field
-    std::string format;        // "pcm" (stream) or "wav" (one-shot)
+    std::string format;        // "pcm" (stream), "wav" (one-shot), or "mp3" (one-shot)
     float       speed;         // OAI speed, parsed then ignored (no time stretch in the ABI)
+};
+
+// Voice reference data passed to synthesis.
+struct tts_voice_ref {
+    const float * audio_24k;  // mono f32 24 kHz audio
+    int           n_samples;  // length in samples
+    const char *  text;       // reference text
 };
 
 // The adapter pushes mono f32 24 kHz audio here. Returns false to abort the
@@ -44,14 +161,28 @@ struct tts_request {
 // on_chunk and stops generation.
 using tts_sink = std::function<bool(const float * samples, int n_samples)>;
 
+// Voice storage and callbacks for voice cloning.
+using tts_voice_map = std::unordered_map<std::string, tts_voice>;
+
 // Adapter implemented by each project tool.
 struct tts_backend {
     std::string              model_id;  // reported by GET /v1/models
-    std::vector<std::string> voices;    // reported by GET /v1/voices, may be empty
+    mutable std::vector<std::string> voices;    // reported by GET /v1/voices, may be empty
+    mutable tts_voice_map    voice_data; // stored voice references by id
+    std::string              voices_dir; // directory to save/load voice files
+
+    // Load voices from local directory on startup.
+    std::function<bool()> load_voices_from_disk;
+
+    // Save a voice reference to disk.
+    std::function<bool(const tts_voice & voice)> save_voice_to_disk;
+
     // Run synthesis. When the request streams, the adapter routes the ABI
     // on_chunk to sink ; otherwise it pushes the whole buffer once. Returns
     // the ABI status (0 on success), and fills err with the ABI message on
     // failure. The shared layer maps the status to an HTTP code.
+    // The voice field can be a voice id; if found in voice_data, the
+    // reference audio and text are used for cloning.
     std::function<int(const tts_request & req, const tts_sink & sink, std::string & err)> synthesize;
 };
 
@@ -135,17 +266,12 @@ static bool tts_parse_request(const std::string & body, tts_request & req, std::
     req.instructions          = yyjson_is_str(instructions) ? yyjson_get_str(instructions) : "";
 
     yyjson_val * fmt = yyjson_obj_get(root, "response_format");
-    req.format       = yyjson_is_str(fmt) ? yyjson_get_str(fmt) : "pcm";
+    req.format       = yyjson_is_str(fmt) ? yyjson_get_str(fmt) : "mp3";
 
     yyjson_val * speed = yyjson_obj_get(root, "speed");
     req.speed          = yyjson_is_num(speed) ? (float) yyjson_get_num(speed) : 1.0f;
 
     yyjson_doc_free(doc);
-
-    if (req.format != "pcm" && req.format != "wav") {
-        err = "response_format must be 'pcm' or 'wav'";
-        return false;
-    }
     return true;
 }
 
@@ -170,8 +296,8 @@ static void tts_handle_speech(const tts_backend & be, const httplib::Request & h
         return;
     }
 
-    if (req.format == "wav") {
-        // One-shot : collect the whole utterance, then emit a RIFF file.
+    if (req.format == "wav" || req.format == "mp3") {
+        // One-shot : collect the whole utterance, then emit a file.
         std::vector<float> buf;
         tts_sink           sink = [&buf](const float * s, int n) {
             buf.insert(buf.end(), s, s + n);
@@ -188,8 +314,18 @@ static void tts_handle_speech(const tts_backend & be, const httplib::Request & h
                            synth_err.empty() ? "synthesis failed" : synth_err.c_str());
             return;
         }
-        std::string wav = audio_encode_wav(buf.data(), (int) buf.size(), 24000, WAV_S16);
-        res.set_content(std::move(wav), "audio/wav");
+        
+        if (req.format == "wav") {
+            std::string wav = audio_encode_wav(buf.data(), (int) buf.size(), 24000, WAV_S16);
+            res.set_content(std::move(wav), "audio/wav");
+        } else {
+            std::string mp3 = audio_encode_mp3(buf.data(), (int) buf.size(), 24000);
+            if (mp3.empty()) {
+                tts_json_error(res, 500, "server_error", "Failed to encode MP3");
+                return;
+            }
+            res.set_content(std::move(mp3), "audio/mpeg");
+        }
         return;
     }
 
@@ -235,17 +371,143 @@ static void tts_handle_models(const tts_backend & be, const httplib::Request &, 
     yyjson_mut_doc_free(doc);
 }
 
-static void tts_handle_voices(const tts_backend & be, const httplib::Request &, httplib::Response & res) {
+// Parse multipart form data.
+static bool tts_parse_multipart_form(
+    const std::string & body,
+    const std::string & boundary,
+    std::string & audio_wav,
+    std::string & ref_text,
+    std::string & voice_id) {
+
+    audio_wav.clear();
+    ref_text.clear();
+    voice_id.clear();
+
+    std::string delimiter = "--" + boundary;
+    size_t pos = 0;
+
+    while ((pos = body.find(delimiter, pos)) != std::string::npos) {
+        pos += delimiter.length();
+
+        // Skip CRLF or LF
+        if (pos < body.length() && body[pos] == '\r') pos++;
+        if (pos < body.length() && body[pos] == '\n') pos++;
+
+        // Find headers
+        size_t header_end = body.find("\r\n\r\n", pos);
+        if (header_end == std::string::npos) break;
+
+        std::string headers = body.substr(pos, header_end - pos);
+        size_t body_start = header_end + 4;
+
+        // Find part end
+        size_t part_end = body.find(delimiter, body_start);
+        if (part_end == std::string::npos) break;
+
+        std::string part_body = body.substr(body_start, part_end - body_start);
+        // Remove trailing CRLF if present
+        if (part_body.length() >= 2 && part_body.substr(part_body.length() - 2) == "\r\n") {
+            part_body = part_body.substr(0, part_body.length() - 2);
+        }
+
+        // Extract form field name (handles both "name=" and "name="; filename="...")
+        size_t name_pos = headers.find("name=\"");
+        if (name_pos != std::string::npos) {
+            name_pos += 6;
+            size_t name_end = headers.find("\"", name_pos);
+            std::string name = headers.substr(name_pos, name_end - name_pos);
+
+            if (name == "audio") {
+                audio_wav = part_body;
+            } else if (name == "text") {
+                ref_text = part_body;
+            } else if (name == "id") {
+                voice_id = part_body;
+            }
+        }
+
+        pos = part_end;
+    }
+
+    fprintf(stderr, "[Voices] Parsed: audio=%zu, text=%zu, id=%zu\n", audio_wav.size(), ref_text.size(), voice_id.size());
+    return !audio_wav.empty() && !ref_text.empty() && !voice_id.empty();
+}
+
+static void tts_handle_voices_get(const tts_backend & be, const httplib::Request &, httplib::Response & res) {
     yyjson_mut_doc * doc  = yyjson_mut_doc_new(NULL);
     yyjson_mut_val * root = yyjson_mut_obj(doc);
     yyjson_mut_doc_set_root(doc, root);
     yyjson_mut_val * arr = yyjson_mut_arr(doc);
     for (const std::string & v : be.voices) {
         yyjson_mut_val * one = yyjson_mut_obj(doc);
+        yyjson_mut_obj_add_str(doc, one, "id", v.c_str());
         yyjson_mut_obj_add_str(doc, one, "name", v.c_str());
         yyjson_mut_arr_add_val(arr, one);
     }
     yyjson_mut_obj_add_val(doc, root, "voices", arr);
+    char * json = yyjson_mut_write(doc, 0, NULL);
+    res.set_content(json ? json : "{}", "application/json");
+    if (json) {
+        free(json);
+    }
+    yyjson_mut_doc_free(doc);
+}
+
+static void tts_handle_voices_post(
+    const tts_backend & be,
+    const httplib::Request & http_req,
+    httplib::Response & res) {
+
+    // httplib already parsed the multipart form data into http_req.form
+    // (req.body is empty because httplib consumes it during its own parsing).
+    if (!http_req.is_multipart_form_data()) {
+        tts_json_error(res, 400, "invalid_request_error", "Content-Type must be multipart/form-data");
+        return;
+    }
+
+    if (!http_req.form.has_field("id") || !http_req.form.has_field("text") || !http_req.form.has_file("audio")) {
+        tts_json_error(res, 400, "invalid_request_error",
+                       "Missing required fields: audio, text, or id");
+        return;
+    }
+
+    std::string voice_id  = http_req.form.get_field("id");
+    std::string ref_text  = http_req.form.get_field("text");
+    std::string audio_wav = http_req.form.get_file("audio").content;
+
+    // Read audio from WAV buffer
+    int n_samples = 0;
+    float * audio = audio_read_mono_from_buf(audio_wav.data(), audio_wav.size(), 24000, &n_samples);
+    if (!audio || n_samples <= 0) {
+        tts_json_error(res, 400, "invalid_request_error", "Failed to parse audio WAV");
+        return;
+    }
+
+    // Create voice entry
+    tts_voice voice;
+    voice.id = voice_id;
+    voice.audio.assign(audio, audio + n_samples);
+    voice.text = ref_text;
+    free(audio);
+
+    // Save to disk if callback provided
+    if (be.save_voice_to_disk) {
+        if (!be.save_voice_to_disk(voice)) {
+            tts_json_error(res, 500, "server_error", "Failed to save voice to disk");
+            return;
+        }
+    }
+
+    // Add to voice map and list
+    be.voice_data[voice_id] = std::move(voice);
+    be.voices.push_back(voice_id);
+
+    // Return success
+    yyjson_mut_doc * doc  = yyjson_mut_doc_new(NULL);
+    yyjson_mut_val * root = yyjson_mut_obj(doc);
+    yyjson_mut_doc_set_root(doc, root);
+    yyjson_mut_obj_add_str(doc, root, "id", voice_id.c_str());
+    yyjson_mut_obj_add_str(doc, root, "object", "voice");
     char * json = yyjson_mut_write(doc, 0, NULL);
     res.set_content(json ? json : "{}", "application/json");
     if (json) {
@@ -302,9 +564,23 @@ static int tts_server_run(const tts_backend & be, const server_config & cfg) {
              [&be](const httplib::Request & req, httplib::Response & res) { tts_handle_speech(be, req, res); });
     svr.Get("/v1/models",
             [&be](const httplib::Request & req, httplib::Response & res) { tts_handle_models(be, req, res); });
+    svr.Post("/v1/voices",
+             [&be](const httplib::Request & req, httplib::Response & res) { tts_handle_voices_post(be, req, res); });
     svr.Get("/v1/voices",
-            [&be](const httplib::Request & req, httplib::Response & res) { tts_handle_voices(be, req, res); });
+            [&be](const httplib::Request & req, httplib::Response & res) { tts_handle_voices_get(be, req, res); });
     svr.Get("/health", tts_handle_health);
+    svr.Get("/", [](const httplib::Request & req, httplib::Response & res) {
+        // Serve index.html from the project root
+        std::ifstream file("index.html", std::ios::binary);
+        if (file) {
+            std::string content((std::istreambuf_iterator<char>(file)),
+                                std::istreambuf_iterator<char>());
+            res.set_content(content, "text/html; charset=utf-8");
+        } else {
+            res.set_content("<html><body><h1>Index page not found</h1></body></html>", "text/html");
+            res.status = 404;
+        }
+    });
 
     signal(SIGINT, tts_on_signal);
     signal(SIGTERM, tts_on_signal);

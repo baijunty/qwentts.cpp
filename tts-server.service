@@ -1,0 +1,15 @@
+[Unit]
+Description=QwenTTS Server on port 8080
+After=network.target remote-fs.target nss-lookup.target
+Wants=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/mnt/ssd/code/qwentts.cpp
+ExecStart=/mnt/ssd/code/qwentts.cpp/build/tts-server --model models/qwen-talker-*.gguf --codec models/qwen-tokenizer-*.gguf --host 0.0.0.0 --port 8081
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

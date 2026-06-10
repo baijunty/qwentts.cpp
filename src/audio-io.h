@@ -96,6 +96,54 @@ static float * audio_read(const char * path, int * T_out, int * sr_out) {
     return result;
 }
 
+// Read WAV from memory buffer, resample to target_sr, downmix to mono.
+// Returns a flat buffer of T floats at target_sr mono. Caller frees.
+static float * audio_read_mono_from_buf(const void * data, size_t size, int target_sr, int * T_out) {
+    size_t    T   = 0;
+    int     sr  = 0;
+    float * raw = audio_io_read_wav_buf((const uint8_t *) data, size, (int *) &T, &sr);
+    if (!raw) {
+        *T_out = 0;
+        return NULL;
+    }
+
+    // Resample planar stereo to target_sr first to keep both channels
+    // coherent when the source rate differs.
+    float * stereo_rs = raw;
+    int     T_rs      = (int) T;
+    if (sr != target_sr) {
+        fprintf(stderr, "[Audio-Resample] %d Hz -> %d Hz, %d samples...\n", sr, target_sr, (int) T);
+        int     T_new     = 0;
+        float * resampled = audio_resample(raw, (int) T, sr, target_sr, 2, &T_new);
+        free(raw);
+        if (!resampled) {
+            fprintf(stderr, "[Audio-Resample] Resample failed\n");
+            *T_out = 0;
+            return NULL;
+        }
+        fprintf(stderr, "[Audio-Resample] Done: %d -> %d samples\n", (int) T, T_new);
+        stereo_rs = resampled;
+        T_rs      = T_new;
+    }
+
+    // Downmix planar [L:T][R:T] to mono = 0.5 * (L + R).
+    float * mono = (float *) malloc((size_t) T_rs * sizeof(float));
+    if (!mono) {
+        free(stereo_rs);
+        *T_out = 0;
+        return NULL;
+    }
+    const float * left  = stereo_rs;
+    const float * right = stereo_rs + (size_t) T_rs;
+    for (int i = 0; i < T_rs; i++) {
+        mono[i] = 0.5f * (left[i] + right[i]);
+    }
+    free(stereo_rs);
+
+    *T_out = T_rs;
+    return mono;
+}
+
 // Read WAV, resample to target_sr, downmix to mono.
 // Returns a flat buffer of T floats at target_sr mono. Caller frees.
 static float * audio_read_mono(const char * path, int target_sr, int * T_out) {
