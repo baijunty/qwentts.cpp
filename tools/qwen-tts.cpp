@@ -13,6 +13,7 @@
 
 #include "audio-io.h"
 #include "qwen.h"
+#include "rvq-file.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -40,6 +41,10 @@ static void print_usage(const char * prog) {
             "                          CustomVoice, rejected for Base\n"
             "  --speaker <name>        Speaker name (CustomVoice only)\n"
             "  --ref-wav <path>        Reference WAV for voice cloning (Base only)\n"
+            "  --ref-spk <path>        Pre-extracted speaker embedding from qwen-codec --talker\n"
+            "                          (replaces --ref-wav, Base only)\n"
+            "  --ref-rvq <path>        Pre-encoded reference codes from qwen-codec (requires\n"
+            "                          --ref-spk and --ref-text, enables ICL clone mode)\n"
             "  --ref-text <path>       Transcript file for the reference (enables ICL clone mode)\n"
             "  --max-new <n>           Max new audio frames (default: 2048)\n"
             "  --codec-chunk-dur <f>   Codec decode chunk duration in seconds (default: 24.0)\n"
@@ -69,6 +74,8 @@ struct Args {
     const char * instruct;
     const char * speaker;
     const char * ref_wav;
+    const char * ref_spk;
+    const char * ref_rvq;
     const char * ref_text_path;
     const char * dump_dir;
     const char * out_wav;
@@ -104,6 +111,34 @@ static std::string read_stdin_text() {
 }
 
 // Read a small text file into a string. Trims trailing newlines.
+// 11 bits per code (V <= 2048), matching qwen-codec.
+static const int RVQ_CODE_BITS = 11;
+
+// Read a .spk file: raw f32 values, the count IS the embedding dimension.
+static bool read_spk_file(const char * path, std::vector<float> & emb) {
+    FILE * f = utf8_fopen(path, "rb");
+    if (!f) {
+        fprintf(stderr, "[CLI] ERROR: cannot open --ref-spk '%s'\n", path);
+        return false;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz <= 0 || (sz % (long) sizeof(float)) != 0) {
+        fprintf(stderr, "[CLI] ERROR: --ref-spk '%s' size %ld is not a positive multiple of 4\n", path, sz);
+        fclose(f);
+        return false;
+    }
+    emb.resize((size_t) sz / sizeof(float));
+    if (fread(emb.data(), sizeof(float), emb.size(), f) != emb.size()) {
+        fprintf(stderr, "[CLI] ERROR: short read on --ref-spk '%s'\n", path);
+        fclose(f);
+        return false;
+    }
+    fclose(f);
+    return true;
+}
+
 static bool read_text_file(const char * path, std::string & out) {
     FILE * f = fopen(path, "rb");
     if (!f) {
@@ -168,6 +203,10 @@ static bool parse_args(int argc, char ** argv, Args & a) {
             a.speaker = argv[++i];
         } else if (std::strcmp(arg, "--ref-wav") == 0 && i + 1 < argc) {
             a.ref_wav = argv[++i];
+        } else if (std::strcmp(arg, "--ref-spk") == 0 && i + 1 < argc) {
+            a.ref_spk = argv[++i];
+        } else if (std::strcmp(arg, "--ref-rvq") == 0 && i + 1 < argc) {
+            a.ref_rvq = argv[++i];
         } else if (std::strcmp(arg, "--ref-text") == 0 && i + 1 < argc) {
             a.ref_text_path = argv[++i];
         } else if (std::strcmp(arg, "--format") == 0 && i + 1 < argc) {
@@ -278,6 +317,29 @@ static int run(const Args & a) {
         ref_n_samples = T_in;
     }
 
+    // Latent reference files. The .spk holds raw f32 values whose count
+    // IS the embedding dimension; the .rvq holds the packed ICL code
+    // matrix. The facade validates the structural constraints (mutual
+    // exclusions, dim match against the talker hidden size).
+    std::vector<float>   ref_spk_emb;
+    std::vector<int32_t> ref_codes;
+    int                  ref_T = 0;
+    if (a.ref_spk) {
+        if (!read_spk_file(a.ref_spk, ref_spk_emb)) {
+            qt_free(q);
+            return 1;
+        }
+        fprintf(stderr, "[CLI] Reference SPK: %s, %zu f32 values\n", a.ref_spk, ref_spk_emb.size());
+    }
+    if (a.ref_rvq) {
+        const int K = qt_num_codebooks(q);
+        if (!rvq_read_file(a.ref_rvq, K, RVQ_CODE_BITS, ref_codes, &ref_T)) {
+            qt_free(q);
+            return 1;
+        }
+        fprintf(stderr, "[CLI] Reference RVQ: %s, K=%d T=%d\n", a.ref_rvq, K, ref_T);
+    }
+
     // Resolve output WAV format string: wav16 / wav24 / wav32. Default
     // wav16 mirrors the omnivoice.cpp default.
     WavFormat wav_fmt;
@@ -323,6 +385,10 @@ static int run(const Args & a) {
     params.ref_audio_24k          = ref_audio_24k;
     params.ref_n_samples          = ref_n_samples;
     params.ref_text               = ref_text;
+    params.ref_spk_emb            = ref_spk_emb.empty() ? NULL : ref_spk_emb.data();
+    params.ref_spk_dim            = (int) ref_spk_emb.size();
+    params.ref_codes              = ref_codes.empty() ? NULL : ref_codes.data();
+    params.ref_T                  = ref_T;
     params.seed                   = a.seed;
     params.max_new_tokens         = a.max_new_tokens;
     params.do_sample              = a.do_sample;

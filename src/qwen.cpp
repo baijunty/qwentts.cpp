@@ -218,6 +218,18 @@ void qt_tts_default_params(struct qt_tts_params * p) {
     p->on_chunk_user_data     = nullptr;
     p->codec_chunk_sec        = 24.0f;
     p->codec_left_context_sec = 2.0f;
+    p->ref_spk_emb            = nullptr;
+    p->ref_spk_dim            = 0;
+    p->ref_codes              = nullptr;
+    p->ref_T                  = 0;
+}
+
+int qt_num_codebooks(const struct qt_context * q) {
+    if (!q) {
+        qt_set_error("qt_num_codebooks: q is NULL");
+        return 0;
+    }
+    return q->pt.num_code_groups;
 }
 
 struct qt_context * qt_init(const struct qt_init_params * params) {
@@ -356,22 +368,26 @@ enum qt_status qt_synthesize(struct qt_context * q, const struct qt_tts_params *
         }
         return QT_STATUS_MODE_INVALID;
     }
-    if (params->ref_audio_24k && mt != "base") {
-        qt_set_error("--ref-wav is only valid for base models (loaded: %s)", mt.c_str());
+    // ABI v2 latent reference fields, same gate as the pipeline.
+    const bool has_lat_spk   = params->abi_version >= 2 && params->ref_spk_emb && params->ref_spk_dim > 0;
+    const bool has_lat_codes = params->abi_version >= 2 && params->ref_codes && params->ref_T > 0;
+
+    if ((params->ref_audio_24k || has_lat_spk) && mt != "base") {
+        qt_set_error("--ref-wav / --ref-spk is only valid for base models (loaded: %s)", mt.c_str());
         if (out) {
             qt_audio_free(out);
         }
         return QT_STATUS_MODE_INVALID;
     }
-    if (params->speaker && params->ref_audio_24k) {
-        qt_set_error("--speaker and --ref-wav are mutually exclusive");
+    if (params->speaker && (params->ref_audio_24k || has_lat_spk)) {
+        qt_set_error("--speaker and --ref-wav / --ref-spk are mutually exclusive");
         if (out) {
             qt_audio_free(out);
         }
         return QT_STATUS_INVALID_PARAMS;
     }
-    if (params->ref_text && !params->ref_audio_24k) {
-        qt_set_error("--ref-text requires --ref-wav");
+    if (params->ref_text && !params->ref_audio_24k && !has_lat_codes) {
+        qt_set_error("--ref-text requires --ref-wav or --ref-rvq");
         if (out) {
             qt_audio_free(out);
         }

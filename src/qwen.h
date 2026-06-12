@@ -57,7 +57,7 @@ extern "C" {
 // git short hash + commit date string returned by qt_version(); for
 // binding compat checks, QT_ABI_VERSION is the only number that
 // matters.
-#define QT_ABI_VERSION 1
+#define QT_ABI_VERSION 2
 
 // Returns a static string of the form "<git-hash> (<date>)" identifying
 // the exact commit this binary was built from. Safe to call from any
@@ -269,6 +269,19 @@ struct qt_tts_params {
     // clamps to >= 0 frames.
     float codec_chunk_sec;
     float codec_left_context_sec;
+
+    // ABI v2. Pre-encoded voice reference, the latent counterpart of
+    // ref_audio_24k. ref_spk_emb is the speaker embedding produced by
+    // the speaker encoder (ref_spk_dim f32 values, must equal the
+    // talker hidden size). ref_codes is the ICL code matrix produced
+    // by the codec encoder, [num_codebooks, ref_T] row-major.
+    // ref_spk_emb alone selects clone mode A; ref_spk_emb + ref_codes
+    // + ref_text selects mode B, mirroring the raw constraints.
+    // Mutually exclusive with ref_audio_24k and speaker.
+    const float *   ref_spk_emb;
+    int             ref_spk_dim;
+    const int32_t * ref_codes;
+    int             ref_T;
 };
 
 // Initialise to the standard defaults. Strings NULL, seed -1,
@@ -277,6 +290,12 @@ struct qt_tts_params {
 // dump_dir NULL, cancel NULL, on_chunk NULL, codec_chunk_sec 24.0,
 // codec_left_context_sec 2.0.
 QT_API void qt_tts_default_params(struct qt_tts_params * p);
+
+// Number of RVQ codebooks (K) of the loaded codec. Pre-encoded ICL
+// reference codes passed via ref_codes are laid out [K, ref_T]
+// row-major; callers reading a packed .rvq stream need K to derive
+// ref_T from the code count. Returns 0 on a NULL handle.
+QT_API int qt_num_codebooks(const struct qt_context * q);
 
 // Run the full TTS synthesis. Validates the params against the loaded
 // model_type (the seven base / custom_voice / voice_design rules),

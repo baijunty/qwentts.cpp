@@ -82,6 +82,22 @@ Voice cloning (`clone.sh`, Base, reference WAV plus its transcript) :
     --lang English -o out.wav < prompt.txt
 ```
 
+Pre-encoded reference (`clone.sh`): `qwen-codec --talker` encodes a reference
+WAV into two compact latents in one pass, the `.spk` speaker embedding and
+the `.rvq` ICL codes, bit-identical to what the `--ref-wav` path computes
+internally. Passing them via `--ref-spk` / `--ref-rvq` skips the speaker
+encoder and the codec encode on every synthesis:
+
+```
+build/qwen-codec --model models/qwen-tokenizer-12hz-Q8_0.gguf \
+    --talker models/qwen-talker-1.7b-base-Q8_0.gguf -i ref.wav
+build/qwen-tts \
+    --model models/qwen-talker-1.7b-base-Q8_0.gguf \
+    --codec models/qwen-tokenizer-12hz-Q8_0.gguf \
+    --ref-spk ref.spk --ref-rvq ref.rvq --ref-text ref.txt \
+    --lang English -o out.wav < prompt.txt
+```
+
 Named speaker (`customvoice.sh`, CustomVoice) :
 
 ```

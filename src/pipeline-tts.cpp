@@ -376,14 +376,50 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
     const std::string   speaker  = params->speaker ? params->speaker : "";
     const std::string   ref_text = params->ref_text ? params->ref_text : "";
 
-    // Voice clone mode A: if ref_audio_24k is given, run the speaker
-    // encoder on the pre-decoded mono buffer and feed the resulting
-    // embedding straight into the prompt builder. Mutually exclusive
-    // with --speaker.
-    const bool         has_ref_audio = (params->ref_audio_24k != NULL) && (params->ref_n_samples > 0);
+    // ABI v2 latent reference fields. Callers compiled against ABI 1
+    // never set them; the abi_version gate keeps their uninitialised
+    // tail bytes out of the read path.
+    const float *   lat_spk_emb = (params->abi_version >= 2) ? params->ref_spk_emb : NULL;
+    const int       lat_spk_dim = (params->abi_version >= 2) ? params->ref_spk_dim : 0;
+    const int32_t * lat_codes   = (params->abi_version >= 2) ? params->ref_codes : NULL;
+    const int       lat_T       = (params->abi_version >= 2) ? params->ref_T : 0;
+
+    const bool has_ref_audio = (params->ref_audio_24k != NULL) && (params->ref_n_samples > 0);
+    const bool has_lat_spk   = (lat_spk_emb != NULL) && (lat_spk_dim > 0);
+    const bool has_lat_codes = (lat_codes != NULL) && (lat_T > 0);
+
+    // Raw waveform and pre-encoded latents are mutually exclusive: the
+    // caller is told immediately rather than picking a winner silently.
+    if (has_ref_audio && (has_lat_spk || has_lat_codes)) {
+        qt_set_error("pipeline_tts_synthesize: ref_audio_24k and ref_spk_emb / ref_codes are mutually exclusive");
+        qt_log(QT_LOG_ERROR, "[Pipeline] ref_audio_24k and ref_spk_emb / ref_codes are mutually exclusive");
+        return QT_STATUS_INVALID_PARAMS;
+    }
+    // Latent ICL codes ride on top of the speaker embedding and need the
+    // transcript, mirroring the raw path where mode B implies mode A.
+    if (has_lat_codes && (!has_lat_spk || ref_text.empty())) {
+        qt_set_error("pipeline_tts_synthesize: ref_codes requires ref_spk_emb and ref_text");
+        qt_log(QT_LOG_ERROR, "[Pipeline] ref_codes requires ref_spk_emb and ref_text");
+        return QT_STATUS_INVALID_PARAMS;
+    }
+
+    // Voice clone mode A: a pre-extracted latent embedding feeds the
+    // prompt builder directly; otherwise, if ref_audio_24k is given, run
+    // the speaker encoder on the pre-decoded mono buffer. Mutually
+    // exclusive with --speaker.
     std::vector<float> ref_spk_emb;
     const float *      ref_spk_emb_ptr = NULL;
-    if (has_ref_audio) {
+    if (has_lat_spk) {
+        if (lat_spk_dim != pt->talker.hidden_size) {
+            qt_set_error("pipeline_tts_synthesize: ref_spk_dim %d mismatches talker hidden %d", lat_spk_dim,
+                         pt->talker.hidden_size);
+            qt_log(QT_LOG_ERROR, "[Pipeline] ref_spk_dim %d mismatches talker hidden %d", lat_spk_dim,
+                   pt->talker.hidden_size);
+            return QT_STATUS_INVALID_PARAMS;
+        }
+        ref_spk_emb_ptr = lat_spk_emb;
+        qt_log(QT_LOG_INFO, "[Pipeline] Latent speaker embedding: %d values", lat_spk_dim);
+    } else if (has_ref_audio) {
         if (!pt->has_speaker_encoder) {
             qt_set_error(
                 "pipeline_tts_synthesize: --ref-wav requires a model with a loaded speaker encoder (Base only)");
@@ -404,17 +440,22 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
         ref_spk_emb_ptr = ref_spk_emb.data();
     }
 
-    // Voice clone mode B: if ref_text is also given, encode the
-    // reference audio into 16 codebook indices via the codec encoder.
-    // Layout returned by pipeline_codec_encode is [num_codebooks, T_codec]
-    // row major, matching what the prompt builder expects for the ICL
-    // sum loop.
+    // Voice clone mode B: pre-encoded latent codes feed the ICL prompt
+    // directly; otherwise, if ref_text is given, encode the reference
+    // audio into 16 codebook indices via the codec encoder. Layout is
+    // [num_codebooks, T_codec] row major in both cases, matching what
+    // the prompt builder expects for the ICL sum loop.
     std::vector<int32_t> ref_codes;
-    int                  ref_codes_T = 0;
-    if (!ref_text.empty()) {
+    const int32_t *      ref_codes_ptr = NULL;
+    int                  ref_codes_T   = 0;
+    if (has_lat_codes) {
+        ref_codes_ptr = lat_codes;
+        ref_codes_T   = lat_T;
+        qt_log(QT_LOG_INFO, "[Pipeline] Latent ICL ref_codes: %d frames at 12.5 Hz", ref_codes_T);
+    } else if (!ref_text.empty()) {
         if (!has_ref_audio) {
-            qt_set_error("pipeline_tts_synthesize: --ref-text requires --ref-wav");
-            qt_log(QT_LOG_ERROR, "[Pipeline] --ref-text requires --ref-wav");
+            qt_set_error("pipeline_tts_synthesize: ref_text requires ref_audio_24k or latent ref_codes");
+            qt_log(QT_LOG_ERROR, "[Pipeline] ref_text requires ref_audio_24k or latent ref_codes");
             return QT_STATUS_INVALID_PARAMS;
         }
         // The codec hop is 1920 samples at 24 kHz so n_samples must be
@@ -431,7 +472,8 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
             qt_log(QT_LOG_ERROR, "[Pipeline] pipeline_codec_encode returned empty codes");
             return QT_STATUS_GENERATE_FAILED;
         }
-        ref_codes_T = (int) ref_codes.size() / pt->num_code_groups;
+        ref_codes_ptr = ref_codes.data();
+        ref_codes_T   = (int) ref_codes.size() / pt->num_code_groups;
         qt_log(QT_LOG_INFO, "[Pipeline] ICL ref_codes: %d frames at 12.5 Hz (%d audio samples)", ref_codes_T,
                aligned_T);
     }
@@ -444,8 +486,8 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
     const char * lang = params->lang ? params->lang : "auto";
 
     Timer t_build;
-    if (!prompt_builder_build(pt, tok, params->text, lang, instruct, speaker, ref_spk_emb_ptr, ref_text,
-                              ref_codes_T > 0 ? ref_codes.data() : NULL, ref_codes_T, &prompt)) {
+    if (!prompt_builder_build(pt, tok, params->text, lang, instruct, speaker, ref_spk_emb_ptr, ref_text, ref_codes_ptr,
+                              ref_codes_T, &prompt)) {
         return QT_STATUS_GENERATE_FAILED;
     }
     perf.build_ms = t_build.ms();
@@ -469,7 +511,7 @@ qt_status pipeline_tts_synthesize(PipelineTTS *                pt,
         }
         if (ref_codes_T > 0) {
             const int shape[2] = { pt->num_code_groups, ref_codes_T };
-            debug_dump_i32_as_f32(&d, "ref-codes", ref_codes.data(), shape, 2);
+            debug_dump_i32_as_f32(&d, "ref-codes", ref_codes_ptr, shape, 2);
         }
     }
 
