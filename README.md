@@ -147,6 +147,129 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the model, the
 GGUF layout, the inference pipeline, every CLI flag, the public API
 reference and the validation results.
 
+## REST API Server
+
+The server provides an OpenAI-compatible REST API for text-to-speech synthesis.
+
+### Running the Server
+
+```bash
+./build/tts-server --model models/qwen-talker-1.7b-base-Q8_0.gguf \
+                   --codec models/qwen-tokenizer-12hz-Q8_0.gguf \
+                   --host 0.0.0.0 --port 8080
+```
+
+### API Endpoints
+
+#### `POST /v1/audio/speech`
+
+Generate speech from text.
+
+**Request body** (JSON):
+```json
+{
+  "input": "Hello world",
+  "voice": "vivian",
+  "instructions": "",
+  "response_format": "mp3",
+  "speed": 1.0
+}
+```
+
+**Parameters:**
+- `input` (required): The text to synthesize
+- `voice` (optional): Speaker ID for named speakers or custom voices
+- `instructions` (optional): Voice design instruction (e.g., "male, young adult, moderate pitch")
+- `response_format` (optional): `"mp3"` (default) or `"wav"`
+- `speed` (optional): Speech speed multiplier (default: 1.0)
+
+**Response:**
+- `audio/mpeg` for MP3 format
+- `audio/wav` for WAV format
+- `audio/pcm` (24kHz S16LE) for streaming (when client doesn't specify format)
+
+**Curl example:**
+```bash
+curl -X POST http://localhost:8080/v1/audio/speech \
+  -H "Content-Type: application/json" \
+  -d '{"input":"Hello world","voice":"vivian","response_format":"mp3"}' \
+  --output out.mp3
+```
+
+#### `GET /v1/models`
+
+List available models.
+
+**Response:**
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "qwen-talker-1.7b-base-Q8_0",
+      "object": "model",
+      "owned_by": "local"
+    }
+  ]
+}
+```
+
+#### `GET /v1/voices`
+
+List available voices (named speakers and custom voices).
+
+**Response:**
+```json
+{
+  "voices": [
+    {"id": "serena", "name": "serena"},
+    {"id": "vivian", "name": "vivian"}
+  ]
+}
+```
+
+#### `POST /v1/voices`
+
+Create a new custom voice (voice cloning) from a reference audio clip.
+
+**Request** (multipart/form-data):
+- `id` (required): Voice ID
+- `text` (required): Transcript of the reference audio
+- `audio` (required): Audio file (WAV, MP3, OGG, M4A, FLAC)
+
+**Curl example:**
+```bash
+curl -X POST http://localhost:8080/v1/voices \
+  -F "id=my_voice" \
+  -F "text=这是一段参考语音" \
+  -F "audio=@ref.wav"
+```
+
+**Response:**
+```json
+{
+  "id": "my_voice",
+  "object": "voice"
+}
+```
+
+#### `GET /health`
+
+Health check endpoint.
+
+**Response:**
+```json
+{"status":"ok"}
+```
+
+#### `GET /`
+
+Serves a web UI (index.html) for interactive use.
+
+### Web UI
+
+A simple web UI is provided at `index.html`. Open it in a browser after starting the server to interact with the TTS API visually.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

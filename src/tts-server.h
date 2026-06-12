@@ -48,10 +48,6 @@ namespace fs = std::filesystem;
 
 // Decode any audio format (mp3, ogg, m4a, etc.) to WAV buffer using ffmpeg
 static std::string audio_decode_to_wav(const void * data, size_t size, int target_sr = 24000) {
-    // Create temp files
-    char temp_input[] = "/tmp/tts_audio_input_XXXXXX";
-    char temp_wav[] = "/tmp/tts_audio_output_XXXXXX.wav";
-    
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
     char input_path_buf[256];
@@ -553,9 +549,10 @@ static void tts_handle_voices_post(
 
     std::string voice_id  = http_req.form.get_field("id");
     std::string ref_text  = http_req.form.get_field("text");
-    httplib::MultipartFormData audio_file = http_req.form.get_file("audio");
+    httplib::FormData audio_file = http_req.form.get_file("audio");
     std::string audio_data = audio_file.content;
     std::string filename = audio_file.filename;
+    std::string content_type = audio_file.content_type;
 
     // Determine audio format from filename extension or content type
     std::string audio_wav;
@@ -564,12 +561,14 @@ static void tts_handle_voices_post(
 
     // Convert filename to lowercase for case-insensitive comparison
     std::string ext = filename;
-    for (auto & c : ext) c = std::tolower((unsigned char)c);
+    for (size_t i = 0; i < ext.size(); i++) {
+        ext[i] = (char)std::tolower((unsigned char)ext[i]);
+    }
 
     // Check if it's a WAV file (can use direct parsing)
     bool is_wav = (ext.size() >= 4 && ext.substr(ext.size() - 4) == ".wav") ||
-                  audio_file.content_type.find("audio/wav") != std::string::npos ||
-                  audio_file.content_type.find("audio/x-wav") != std::string::npos;
+                  content_type.find("audio/wav") != std::string::npos ||
+                  content_type.find("audio/x-wav") != std::string::npos;
 
     if (is_wav) {
         // Use direct WAV parsing for WAV files
