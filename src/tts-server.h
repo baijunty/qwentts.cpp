@@ -35,13 +35,93 @@
 #include <vector>
 #include <fstream>
 #include <filesystem>
+#include <sstream>
 
 #if defined(_WIN32)
 #include <fcntl.h>
 #include <io.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace fs = std::filesystem;
+
+// Decode any audio format (mp3, ogg, m4a, etc.) to WAV buffer using ffmpeg
+static std::string audio_decode_to_wav(const void * data, size_t size, int target_sr = 24000) {
+    // Create temp files
+    char temp_input[] = "/tmp/tts_audio_input_XXXXXX";
+    char temp_wav[] = "/tmp/tts_audio_output_XXXXXX.wav";
+    
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    char input_path_buf[256];
+    char wav_path_buf[256];
+    snprintf(input_path_buf, sizeof(input_path_buf), "/tmp/tts_audio_%ld_%ld", ts.tv_sec, ts.tv_nsec);
+    snprintf(wav_path_buf, sizeof(wav_path_buf), "/tmp/tts_audio_%ld_%ld.wav", ts.tv_sec, ts.tv_nsec);
+    std::string input_path = input_path_buf;
+    std::string wav_path = wav_path_buf;
+    
+    // Write input data to temp file
+    int fd_input = open(input_path.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0644);
+    if (fd_input < 0) {
+        fprintf(stderr, "[AudioDecode] Failed to create temp input file: %s\n", strerror(errno));
+        return {};
+    }
+    
+    if (write(fd_input, data, size) != (ssize_t)size) {
+        close(fd_input);
+        unlink(input_path.c_str());
+        fprintf(stderr, "[AudioDecode] Failed to write temp input file\n");
+        return {};
+    }
+    close(fd_input);
+    
+    // Convert to WAV using ffmpeg
+    std::string cmd = "ffmpeg -y -loglevel error -i ";
+    cmd += input_path;
+    cmd += " -ar ";
+    cmd += std::to_string(target_sr);
+    cmd += " -ac 1 -f wav -acodec pcm_s16le ";
+    cmd += wav_path;
+    
+    int ret = system(cmd.c_str());
+    if (ret != 0) {
+        unlink(input_path.c_str());
+        unlink(wav_path.c_str());
+        fprintf(stderr, "[AudioDecode] ffmpeg failed with code %d\n", ret);
+        fprintf(stderr, "[AudioDecode] Command: %s\n", cmd.c_str());
+        return {};
+    }
+    
+    // Read WAV output
+    FILE *fp = fopen(wav_path.c_str(), "rb");
+    if (!fp) {
+        unlink(input_path.c_str());
+        unlink(wav_path.c_str());
+        fprintf(stderr, "[AudioDecode] Failed to read WAV output\n");
+        return {};
+    }
+    
+    fseek(fp, 0, SEEK_END);
+    long wav_size = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+    
+    std::string wav_data;
+    wav_data.resize(wav_size);
+    size_t read_size = fread(&wav_data[0], 1, wav_size, fp);
+    fclose(fp);
+    
+    // Cleanup temp files
+    unlink(input_path.c_str());
+    unlink(wav_path.c_str());
+    
+    if (read_size != (size_t)wav_size) {
+        fprintf(stderr, "[AudioDecode] Failed to read WAV data\n");
+        return {};
+    }
+    
+    return wav_data;
+}
 
 static std::string audio_encode_mp3(const float * audio, int T_audio, int sr) {
     std::string wav_data = audio_encode_wav(audio, T_audio, sr, WAV_S16);
@@ -473,14 +553,44 @@ static void tts_handle_voices_post(
 
     std::string voice_id  = http_req.form.get_field("id");
     std::string ref_text  = http_req.form.get_field("text");
-    std::string audio_wav = http_req.form.get_file("audio").content;
+    httplib::MultipartFormData audio_file = http_req.form.get_file("audio");
+    std::string audio_data = audio_file.content;
+    std::string filename = audio_file.filename;
 
-    // Read audio from WAV buffer
+    // Determine audio format from filename extension or content type
+    std::string audio_wav;
     int n_samples = 0;
-    float * audio = audio_read_mono_from_buf(audio_wav.data(), audio_wav.size(), 24000, &n_samples);
-    if (!audio || n_samples <= 0) {
-        tts_json_error(res, 400, "invalid_request_error", "Failed to parse audio WAV");
-        return;
+    float * audio = nullptr;
+
+    // Convert filename to lowercase for case-insensitive comparison
+    std::string ext = filename;
+    for (auto & c : ext) c = std::tolower((unsigned char)c);
+
+    // Check if it's a WAV file (can use direct parsing)
+    bool is_wav = (ext.size() >= 4 && ext.substr(ext.size() - 4) == ".wav") ||
+                  audio_file.content_type.find("audio/wav") != std::string::npos ||
+                  audio_file.content_type.find("audio/x-wav") != std::string::npos;
+
+    if (is_wav) {
+        // Use direct WAV parsing for WAV files
+        audio = audio_read_mono_from_buf(audio_data.data(), audio_data.size(), 24000, &n_samples);
+        if (!audio || n_samples <= 0) {
+            tts_json_error(res, 400, "invalid_request_error", "Failed to parse audio WAV");
+            return;
+        }
+    } else {
+        // Use ffmpeg to decode other formats (mp3, ogg, m4a, flac, etc.)
+        audio_wav = audio_decode_to_wav(audio_data.data(), audio_data.size(), 24000);
+        if (audio_wav.empty()) {
+            tts_json_error(res, 400, "invalid_request_error", 
+                           "Failed to decode audio format. Supported formats: wav, mp3, ogg, m4a, flac");
+            return;
+        }
+        audio = audio_read_mono_from_buf(audio_wav.data(), audio_wav.size(), 24000, &n_samples);
+        if (!audio || n_samples <= 0) {
+            tts_json_error(res, 400, "invalid_request_error", "Failed to parse decoded audio");
+            return;
+        }
     }
 
     // Create voice entry
